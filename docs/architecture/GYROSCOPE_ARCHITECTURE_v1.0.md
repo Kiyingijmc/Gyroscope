@@ -1,7 +1,7 @@
 # GYROSCOPE ARCHITECTURE SPECIFICATION v1.0
 
-**Status:** APPROVED
-**Scope:** Architectural boundaries, directory mappings, dependency rules, and authority boundaries.
+**Status:** APPROVED SPECIFICATION & FOUNDATION MATRIX
+**Scope:** Architectural boundaries, directory mappings, dependency rules, authority boundaries, and implementation status.
 
 ---
 
@@ -14,17 +14,19 @@ gyroscope/
 ├── core/            # Fundamental domain primitives, invariants, and base exceptions
 ├── observation/     # Canonical market data structures, causal timestamps, data quality checks
 ├── state/           # Deterministic state machine primitives, transitions, and state versioning
-├── estimation/      # State estimation interfaces (e.g. Kalman filter contracts)
-├── evidence/        # Evidence accumulation, confidence scoring, and innovation contracts
-├── health/          # System sanity monitoring, circuit breakers, integrity validation
-├── episodes/        # Opportunity framing, setup context, trade episode primitives
-├── risk/            # Risk Authority, exposure limits, drawdown protection, position sizing
-├── execution/       # Execution Authority, order state machines, fill processing
-├── persistence/     # State snapshots, event logging, WAL (Write-Ahead-Log) abstractions
-├── recovery/        # Snapshot restoration, crash recovery, crash replay engine
+├── config/          # Explicit, serializable, hashable configuration
 ├── provenance/      # Provenance lineage tracking, hash chains, causal tracing
-├── research/        # Offline research, backtesting harness, hypothesis validation (R0-R2)
-└── adapters/        # Exchange/broker protocol translators and data feeds
+├── logging/         # Structured telemetry logging
+├── estimation/      # State estimation interfaces (e.g. Kalman filter contracts - SPECIFIED_ONLY)
+├── evidence/        # Evidence accumulation, confidence scoring (SPECIFIED_ONLY)
+├── health/          # System sanity monitoring, circuit breakers (SPECIFIED_ONLY)
+├── episodes/        # Opportunity framing, setup context (SPECIFIED_ONLY)
+├── risk/            # Risk Authority, exposure limits, drawdown protection (SPECIFIED_ONLY)
+├── execution/       # Execution Authority, order state machines (SPECIFIED_ONLY)
+├── persistence/     # WAL abstractions (SPECIFIED_ONLY / Foundational contract implemented)
+├── recovery/        # Snapshot restoration (SPECIFIED_ONLY / Foundational contract implemented)
+├── research/        # Offline research harness (R0-R2 isolation enforced)
+└── adapters/        # Exchange/broker protocol translators (SPECIFIED_ONLY)
 ```
 
 ---
@@ -54,7 +56,31 @@ To maintain systemic integrity, dependencies between modules must follow a stric
 
 ---
 
-## 3. AUTHORITY OWNERSHIP MATRIX
+## 3. COMPONENT IMPLEMENTATION STATUS MATRIX
+
+| Component | Specification | Runtime Implementation | Tests | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Core Types & Invariants** | Yes | Yes | Yes | `IMPLEMENTED` |
+| **Configuration Engine** | Yes | Yes | Yes | `IMPLEMENTED` |
+| **Observation & Causality** | Yes | Yes | Yes | `IMPLEMENTED` |
+| **State Machine & Hash** | Yes | Yes | Yes | `IMPLEMENTED` |
+| **Provenance Tracking** | Yes | Yes | Yes | `IMPLEMENTED` |
+| **Structured Telemetry** | Yes | Yes | Yes | `IMPLEMENTED` |
+| **State Serialization** | Yes | Yes | Yes | `IMPLEMENTED` |
+| **State Replay Contract** | Yes | Foundation Contract | Yes | `IMPLEMENTED` |
+| **State Recovery Contract** | Yes | Foundation Contract | Yes | `IMPLEMENTED` |
+| **State Estimation / Kalman** | Yes | No | No | `SPECIFIED_ONLY` |
+| **Evidence Engine / PEF** | Yes | No | No | `SPECIFIED_ONLY` |
+| **Model Health / NIS** | Yes | No | No | `SPECIFIED_ONLY` |
+| **Episode Framing** | Yes | No | No | `SPECIFIED_ONLY` |
+| **Risk Authority** | Yes | No | No | `SPECIFIED_ONLY` |
+| **Execution Authority** | Yes | No | No | `SPECIFIED_ONLY` |
+| **Broker Adapters** | Yes | No | No | `SPECIFIED_ONLY` |
+| **Production Persistence WAL** | Yes | No | No | `SPECIFIED_ONLY` |
+
+---
+
+## 4. AUTHORITY OWNERSHIP MATRIX
 
 | Domain Module | Primary Authority / Responsibility | Permitted Side Effects |
 | :--- | :--- | :--- |
@@ -67,7 +93,7 @@ To maintain systemic integrity, dependencies between modules must follow a stric
 
 ---
 
-## 4. FUTURE EXTENSION POINTS
+## 5. FUTURE EXTENSION POINTS
 
 - **State Estimators (`gyroscope/estimation`):** Plug-and-play interfaces for linear, extended, or unscented state estimators.
 - **Evidence Accumulators (`gyroscope/evidence`):** Abstractions for sequential statistical evidence scoring without modifying Risk or Execution layers.
