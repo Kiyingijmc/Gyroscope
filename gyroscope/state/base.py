@@ -79,7 +79,13 @@ class Event:
 
 @dataclass
 class SystemState:
-    """Deterministic system state holder with canonical semantic payload hashing and snapshot hashing."""
+    """Deterministic system state holder with canonical semantic payload hashing and snapshot hashing.
+
+    Sequence Semantics:
+      - SystemState.sequence_number represents the highest authoritative event sequence number incorporated into the state.
+      - For sequence-bearing events (sequence_number > 0), sequence_number updates to event.sequence_number.
+      - For sequence_number == 0 events (e.g. unsequenced tick/heartbeat), sequence_number increments by 1 if event sequence is 0.
+    """
     schema_version: str = "1.0"
     model_version: str = "1.0.0"
     feature_version: str = "1.0.0"
@@ -138,7 +144,11 @@ class SystemState:
                 f"Out-of-order event timestamp ({event.event_timestamp_ns}) is earlier than state last_event_timestamp_ns ({self.last_event_timestamp_ns})"
             )
 
-        self.sequence_number += 1
+        if event.sequence_number > 0:
+            self.sequence_number = event.sequence_number
+        else:
+            self.sequence_number += 1
+
         self.last_event_id = event.event_id
         self.last_event_timestamp_ns = event.event_timestamp_ns
         self._processed_event_ids.add(event.event_id)

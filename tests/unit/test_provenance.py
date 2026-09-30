@@ -37,4 +37,4 @@ def test_provenance_recording_and_ancestry_tracing():
     node_ids = [node.node_id for node in ancestry]
 
     assert node_ids == ["p3", "p2", "p1"]
-    assert tracker.get_node("p2").parent_node_ids == ["p1"]
+    assert tracker.get_node("p2").parent_node_ids == ("p1",)

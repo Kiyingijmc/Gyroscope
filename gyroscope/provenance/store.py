@@ -1,4 +1,4 @@
-"""Abstract and in-memory provenance store abstractions."""
+"""Abstract and in-memory provenance store abstractions with graph integrity and cycle detection."""
 
 from abc import ABC, abstractmethod
 from typing import List, Optional
@@ -10,7 +10,7 @@ class ProvenanceStore(ABC):
     """Abstract interface for immutable decision provenance persistence."""
 
     @abstractmethod
-    def record(self, node: ProvenanceNode) -> None:
+    def record(self, node: ProvenanceNode, validate_parents: bool = True) -> None:
         """Record an immutable provenance node."""
         pass
 
@@ -26,12 +26,21 @@ class ProvenanceStore(ABC):
 
 
 class InMemoryProvenanceStore(ProvenanceStore):
-    """In-memory implementation of ProvenanceStore with immutability guarantees."""
+    """In-memory implementation of ProvenanceStore with immutability guarantees and graph integrity checks."""
 
     def __init__(self):
         self._nodes = {}
 
-    def record(self, node: ProvenanceNode) -> None:
+    def record(self, node: ProvenanceNode, validate_parents: bool = True) -> None:
+        """Record an immutable provenance node, validating parent presence and cycle prevention."""
+        if node.node_id in node.parent_node_ids:
+            raise ValueError(f"Self-referential provenance parent prohibited for node {node.node_id}")
+
+        if validate_parents and node.parent_node_ids:
+            for parent_id in node.parent_node_ids:
+                if parent_id not in self._nodes:
+                    raise KeyError(f"Parent provenance node '{parent_id}' not found in store for node '{node.node_id}'")
+
         if node.node_id in self._nodes:
             existing = self._nodes[node.node_id]
             if existing != node:
@@ -39,12 +48,14 @@ class InMemoryProvenanceStore(ProvenanceStore):
                     f"Attempted to mutate historical provenance node {node.node_id} with conflicting payload."
                 )
             return
+
         self._nodes[node.node_id] = node
 
     def get_node(self, node_id: str) -> Optional[ProvenanceNode]:
         return self._nodes.get(node_id)
 
     def trace_ancestry(self, node_id: str) -> List[ProvenanceNode]:
+        """Backtrack through parent lineage using cycle-safe traversal."""
         ancestry = []
         visited = set()
         queue = [node_id]

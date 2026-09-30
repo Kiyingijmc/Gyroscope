@@ -9,13 +9,14 @@ from gyroscope.state.base import SystemState
 
 
 def compute_snapshot_hash(snapshot_data: Dict[str, Any]) -> str:
-    """Compute canonical SHA-256 hash of a snapshot envelope."""
-    canonical_str = json.dumps(snapshot_data, sort_keys=True, separators=(",", ":"))
+    """Compute canonical SHA-256 hash of a snapshot envelope excluding the snapshot_hash field itself."""
+    data_to_hash = {k: v for k, v in snapshot_data.items() if k != "snapshot_hash"}
+    canonical_str = json.dumps(data_to_hash, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
 
 
 def serialize_state(state: SystemState) -> str:
-    """Serialize system state into a canonical versioned JSON string with dual hash contracts."""
+    """Serialize system state into a canonical versioned JSON string with triple hash contracts."""
     state_hash = state.compute_state_hash()
     payload_hash = state.compute_state_payload_hash()
 
@@ -47,12 +48,27 @@ def deserialize_state(
     expected_model_version: str = "1.0.0",
     expected_config_hash: str = None,
 ) -> SystemState:
-    """Deserialize state JSON string and verify state hash, payload hash, and version invariants."""
+    """Deserialize state JSON string and independently verify snapshot envelope hash, state hash, payload hash, and version invariants."""
     try:
         data = json.loads(json_str)
     except Exception as err:
         raise StateCorruptedException(f"Failed to parse JSON state payload: {err}") from err
 
+    if not isinstance(data, dict):
+        raise StateCorruptedException("Serialized state payload must be a JSON object.")
+
+    # 1. Snapshot Envelope Integrity Check
+    header_snapshot_hash = data.get("snapshot_hash")
+    if not header_snapshot_hash:
+        raise StateCorruptedException("Missing mandatory 'snapshot_hash' field in serialized snapshot envelope.")
+
+    computed_snapshot_hash = compute_snapshot_hash(data)
+    if computed_snapshot_hash != header_snapshot_hash:
+        raise StateCorruptedException(
+            f"Snapshot envelope integrity failure: header snapshot_hash '{header_snapshot_hash}' does not match computed snapshot_hash '{computed_snapshot_hash}'"
+        )
+
+    # 2. Version and Metadata Validation
     schema_version = data.get("schema_version")
     if schema_version != expected_schema_version:
         raise VersionMismatchError(
@@ -72,6 +88,9 @@ def deserialize_state(
         )
 
     payload = data.get("state_payload", {})
+    if not isinstance(payload, dict):
+        raise StateCorruptedException("State payload field 'state_payload' must be a dictionary.")
+
     custom_state = payload.get("custom_state", {})
     processed_event_ids = payload.get("processed_event_ids", [])
 
@@ -89,6 +108,7 @@ def deserialize_state(
         _processed_event_ids=set(processed_event_ids),
     )
 
+    # 3. State Header Hash Integrity Verification
     computed_state_hash = state.compute_state_hash()
     header_state_hash = data.get("state_hash")
     if computed_state_hash != header_state_hash:
@@ -96,6 +116,7 @@ def deserialize_state(
             f"State hash integrity failure: header state_hash '{header_state_hash}' does not match computed state_hash '{computed_state_hash}'"
         )
 
+    # 4. State Payload Hash Integrity Verification
     computed_payload_hash = state.compute_state_payload_hash()
     header_payload_hash = data.get("state_payload_hash")
     if header_payload_hash and computed_payload_hash != header_payload_hash:

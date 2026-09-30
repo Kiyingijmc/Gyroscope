@@ -193,6 +193,25 @@ class SnapshotStore:
         return state
 
 
+class ReplayStatus(str, Enum):
+    """Explicit replay outcome status."""
+    COMPLETE = "COMPLETE"
+    COMPLETE_WITH_DUPLICATES = "COMPLETE_WITH_DUPLICATES"
+    GAP_DETECTED = "GAP_DETECTED"
+    TIMESTAMP_REGRESSION_DETECTED = "TIMESTAMP_REGRESSION_DETECTED"
+    FAILED = "FAILED"
+
+
+@dataclass(frozen=True)
+class ReplayResult:
+    """Explicit outcome object returned by DeterministicReplayEngine."""
+    status: ReplayStatus
+    final_state: SystemState
+    processed_count: int
+    duplicate_count: int
+    gap_events: Tuple[SequenceGapEvent, ...]
+
+
 class DeterministicReplayEngine:
     """Pure deterministic event replay engine.
 
@@ -201,11 +220,13 @@ class DeterministicReplayEngine:
       - Orders events deterministically
       - Detects sequence gaps
       - Applies events through SystemState reducer
+      - Returns strongly typed ReplayResult
       - Guarantees: Replay(E1...En) == Snapshot(Ek) + Replay(Ek+1...En)
     """
 
-    def __init__(self, initial_state: Optional[SystemState] = None):
+    def __init__(self, initial_state: Optional[SystemState] = None, fail_on_gap: bool = False):
         self.state = initial_state or SystemState()
+        self.fail_on_gap = fail_on_gap
         self.gap_detector = GapDetector(
             initial_sequence=self.state.sequence_number,
             initial_timestamp_ns=self.state.last_event_timestamp_ns,
@@ -216,19 +237,43 @@ class DeterministicReplayEngine:
         """Submit unordered events to the causal reordering buffer."""
         self.buffer.push_many(events)
 
-    def process_buffered_events(self) -> int:
+    def process_buffered_events(self) -> ReplayResult:
         """Flush buffered events deterministically, inspect for gaps, and reduce state."""
         ordered = self.buffer.flush_ordered()
         processed_count = 0
+        duplicate_count = 0
+
         for evt in ordered:
-            self.gap_detector.inspect(evt)
+            status = self.gap_detector.inspect(evt)
+            if self.fail_on_gap and status == GapStatus.DATA_GAP:
+                raise DeterminismViolationError(f"Replay halted due to sequence gap at event {evt.event_id}")
+
             applied = self.state.process_event(evt)
             if applied:
                 processed_count += 1
-        return processed_count
+            else:
+                duplicate_count += 1
+
+        gap_events = tuple(self.gap_detector.detected_gaps)
+        if any(g.status == GapStatus.DATA_GAP for g in gap_events):
+            replay_status = ReplayStatus.GAP_DETECTED
+        elif any(g.status == GapStatus.TIMESTAMP_REGRESSION for g in gap_events):
+            replay_status = ReplayStatus.TIMESTAMP_REGRESSION_DETECTED
+        elif duplicate_count > 0:
+            replay_status = ReplayStatus.COMPLETE_WITH_DUPLICATES
+        else:
+            replay_status = ReplayStatus.COMPLETE
+
+        return ReplayResult(
+            status=replay_status,
+            final_state=self.state,
+            processed_count=processed_count,
+            duplicate_count=duplicate_count,
+            gap_events=gap_events,
+        )
 
     def replay_stream(self, events: List[Event]) -> SystemState:
-        """Replay a stream of events cleanly from scratch or current state."""
+        """Replay a stream of events cleanly from scratch or current state and return state for compatibility."""
         self.submit_events(events)
-        self.process_buffered_events()
-        return self.state
+        res = self.process_buffered_events()
+        return res.final_state
