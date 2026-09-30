@@ -15,11 +15,11 @@ historical_foundation_branch: foundation/gyroscope-research-bootstrap-4872793722
 
 foundation_root_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
 foundation_v1_closure_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
-verification_parent_sha: b2647ef72b4f3510669a7c96c19235a844e1dae8
+verification_parent_sha: DYNAMIC_GIT_HEAD_PARENT
 verified_commit_sha: DYNAMIC_GIT_HEAD
 verification_commit_sha: DYNAMIC_GIT_HEAD
 
-git_topology: "3a9254445849d26544ae6aa5c03a5e767fd3586b (root) -> 0f8c01a4004ed34a27660d964d34bb47adea2bc3 (v1 closure) -> 2c9bf08e35ce469c5c80916caa800a0b6e9a54ee -> d5e50a40c4f996d02b2810039331050396b0ae87 -> b2647ef72b4f3510669a7c96c19235a844e1dae8 (verification parent) -> forensic closure HEAD"
+git_topology: "3a9254445849d26544ae6aa5c03a5e767fd3586b (root) -> 0f8c01a4004ed34a27660d964d34bb47adea2bc3 (v1 closure) -> historical forensic verification commits -> DYNAMIC_GIT_HEAD_PARENT (verification parent) -> DYNAMIC_GIT_HEAD (forensic verification closure HEAD)"
 python_version_requirement: ">=3.12"
 runtime_environment: Python 3.12.13 / pytest 9.0.2
 ```
@@ -27,7 +27,7 @@ runtime_environment: Python 3.12.13 / pytest 9.0.2
 > **Git Provenance & Topology Note:**
 > - **Foundation Root (`foundation_root_sha`):** Commit `3a9254445849d26544ae6aa5c03a5e767fd3586b` is the true repository root commit (`git rev-list --max-parents=0 HEAD`).
 > - **Foundation v1.0 Closure (`foundation_v1_closure_sha`):** Commit `0f8c01a4004ed34a27660d964d34bb47adea2bc3` represents the historical Foundation v1.0 closure state.
-> - **Verification Parent (`verification_parent_sha`):** Commit `b2647ef72b4f3510669a7c96c19235a844e1dae8` is the direct parent of the current forensic verification HEAD (`git rev-parse HEAD^`).
+> - **Verification Parent (`verification_parent_sha`):** Represented dynamically as `DYNAMIC_GIT_HEAD_PARENT`, which resolves to `git rev-parse HEAD^`.
 > - **Forensic Verification Closure (`forensic_verification_sha` / `verified_commit_sha`):** Represents the current branch HEAD commit being verified (`git rev-parse HEAD`), represented dynamically as `DYNAMIC_GIT_HEAD` to avoid self-referential cryptographic circularity.
 
 ---
@@ -47,7 +47,7 @@ purpose: "Establish architectural, research, testing, provenance, determinism, a
 ```yaml
 verification_date: "2026-09-29"
 verification_branch: "foundation/closure-correction-verification-pass-4893052973368806390"
-verification_parent_sha: "b2647ef72b4f3510669a7c96c19235a844e1dae8"
+verification_parent_sha: DYNAMIC_GIT_HEAD_PARENT
 verification_commit_sha: DYNAMIC_GIT_HEAD
 verification_commands:
   collect: "pytest --collect-only -q"
@@ -56,8 +56,8 @@ verification_commands:
   compileall: "python -m compileall gyroscope tests"
 python_version: "3.12.13"
 pytest_version: "9.0.2"
-pytest_collection_count: 31
-pytest_pass_count: 31
+pytest_collection_count: 32
+pytest_pass_count: 32
 pytest_failure_count: 0
 pytest_error_count: 0
 compileall_result: "PASS (Exit code 0)"
@@ -65,7 +65,7 @@ ci_workflow: ".github/workflows/ci.yml"
 ci_status: "VERIFIED_WORKFLOW_UPDATED"
 ```
 
-> **Historical Test Count Audit Note:** The initial root baseline (`3a9254445849d26544ae6aa5c03a5e767fd3586b`) contained 22 tests. The closure commit (`0f8c01a4004ed34a27660d964d34bb47adea2bc3`) added 5 tests (totaling 27 tests) while stating 28 passed in its commit message. Following the forensic closure pass, 3 additional verification and isolation tests were added, bringing the canonical test suite to 31 tests, all passing with 0 failures and 0 errors.
+> **Historical Test Count Audit Note:** The initial root baseline (`3a9254445849d26544ae6aa5c03a5e767fd3586b`) contained 22 tests. The closure commit (`0f8c01a4004ed34a27660d964d34bb47adea2bc3`) added 5 tests (totaling 27 tests). Following the forensic closure pass and dynamic provenance marker regression additions, the canonical test suite stands at 32 tests, all passing with 0 failures and 0 errors.
 
 ---
 

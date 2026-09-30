@@ -12,8 +12,8 @@
 - **Historical Foundation Branch:** `foundation/gyroscope-research-bootstrap-4872793722170977238`
 - **Foundation Root SHA (`foundation_root_sha`):** `3a9254445849d26544ae6aa5c03a5e767fd3586b`
 - **Foundation v1.0 Closure SHA (`foundation_v1_closure_sha`):** `0f8c01a4004ed34a27660d964d34bb47adea2bc3`
-- **Verification Parent SHA (`verification_parent_sha`):** `b2647ef72b4f3510669a7c96c19235a844e1dae8`
-- **Forensic Verification SHA (`forensic_verification_sha` / `verified_commit_sha`):** Dynamic Current Branch HEAD (`git rev-parse HEAD`)
+- **Verification Parent SHA (`verification_parent_sha`):** `DYNAMIC_GIT_HEAD_PARENT` (`git rev-parse HEAD^`)
+- **Forensic Verification SHA (`forensic_verification_sha` / `verified_commit_sha`):** `DYNAMIC_GIT_HEAD` (`git rev-parse HEAD`)
 - **Language / Runtime Requirement:** Python 3.12+ (Tested on Python 3.12.13)
 - **Dependency Manager:** Standard Python `pip` / `setuptools` / `pyproject.toml`
 - **Test Framework:** `pytest` 9.0.2
@@ -62,8 +62,8 @@ The following components are formally specified in architectural contracts (`doc
 
 - **Test Suite Verification Results (Canonical Closure Pass):**
   - Verification Commands: `pytest -v` and `python -m compileall gyroscope tests`
-  - Collected: 31 tests
-  - Passed: 31 tests
+  - Collected: 32 tests
+  - Passed: 32 tests
   - Failed: 0
   - Errors: 0
   - Compileall Exit Code: 0 (PASS)
