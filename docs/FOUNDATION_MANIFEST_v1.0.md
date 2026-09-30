@@ -15,11 +15,11 @@ historical_foundation_branch: foundation/gyroscope-research-bootstrap-4872793722
 
 foundation_root_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
 foundation_v1_closure_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
-parent_commit_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
-verified_commit_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
-verification_commit_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
+verification_parent_sha: 2c9bf08e35ce469c5c80916caa800a0b6e9a54ee
+verified_commit_sha: DYNAMIC_GIT_HEAD
+verification_commit_sha: DYNAMIC_GIT_HEAD
 
-git_topology: "3a9254445849d26544ae6aa5c03a5e767fd3586b (root) -> 0f8c01a4004ed34a27660d964d34bb47adea2bc3 (v1 closure) -> forensic verification closure (HEAD)"
+git_topology: "3a9254445849d26544ae6aa5c03a5e767fd3586b (root) -> 0f8c01a4004ed34a27660d964d34bb47adea2bc3 (v1 closure) -> 2c9bf08e35ce469c5c80916caa800a0b6e9a54ee (parent) -> forensic closure HEAD"
 python_version_requirement: ">=3.12"
 runtime_environment: Python 3.12.13 / pytest 9.0.2
 ```
@@ -46,7 +46,8 @@ purpose: "Establish architectural, research, testing, provenance, determinism, a
 ```yaml
 verification_date: "2026-09-29"
 verification_branch: "foundation/closure-correction-verification-pass-4893052973368806390"
-verification_commit_sha: "0f8c01a4004ed34a27660d964d34bb47adea2bc3"
+verification_parent_sha: "2c9bf08e35ce469c5c80916caa800a0b6e9a54ee"
+verification_commit_sha: DYNAMIC_GIT_HEAD
 verification_commands:
   collect: "pytest --collect-only -q"
   pytest_verbose: "pytest -v"

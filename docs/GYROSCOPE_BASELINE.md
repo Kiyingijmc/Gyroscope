@@ -12,7 +12,8 @@
 - **Historical Foundation Branch:** `foundation/gyroscope-research-bootstrap-4872793722170977238`
 - **Foundation Root SHA (`foundation_root_sha`):** `3a9254445849d26544ae6aa5c03a5e767fd3586b`
 - **Foundation v1.0 Closure SHA (`foundation_v1_closure_sha`):** `0f8c01a4004ed34a27660d964d34bb47adea2bc3`
-- **Forensic Verification SHA (`forensic_verification_sha` / `verified_commit_sha`):** Current Branch HEAD (`git rev-parse HEAD`)
+- **Verification Parent SHA (`verification_parent_sha`):** `2c9bf08e35ce469c5c80916caa800a0b6e9a54ee`
+- **Forensic Verification SHA (`forensic_verification_sha` / `verified_commit_sha`):** Dynamic Current Branch HEAD (`git rev-parse HEAD`)
 - **Language / Runtime Requirement:** Python 3.12+ (Tested on Python 3.12.13)
 - **Dependency Manager:** Standard Python `pip` / `setuptools` / `pyproject.toml`
 - **Test Framework:** `pytest` 9.0.2
