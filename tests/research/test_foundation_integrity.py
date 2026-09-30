@@ -82,13 +82,11 @@ def test_provenance_documentation_agrees_with_git():
         f"Baseline Foundation Root SHA does not match Git root SHA: {git_root}"
     )
 
-    # B. Verification parent SHA must match actual Git parent SHA (HEAD^) or working copy HEAD
+    # B. Verification parent SHA must match actual Git parent SHA (HEAD^) strictly
     assert (
         f"verification_parent_sha: {git_parent}" in manifest_text
-        or f"verification_parent_sha: {git_head}" in manifest_text
         or f'verification_parent_sha: "{git_parent}"' in manifest_text
-        or f'verification_parent_sha: "{git_head}"' in manifest_text
-    ), f"Manifest verification_parent_sha does not match Git parent ({git_parent}) or working copy HEAD ({git_head})"
+    ), f"Manifest verification_parent_sha does not match actual Git parent HEAD^ ({git_parent})"
 
     # C. Verification branch must match actual Git branch
     assert f"verification_branch: {git_branch}" in manifest_text, (
