@@ -29,6 +29,14 @@ jobs:
         run: |
           python -c "import gyroscope; print('Gyroscope package import verified!')"
 
+      - name: Compile Python Sources
+        run: |
+          python -m compileall gyroscope tests
+
+      - name: Verify Test Collection
+        run: |
+          pytest --collect-only -q
+
       - name: Run Pytest Suite
         run: |
           pytest -v

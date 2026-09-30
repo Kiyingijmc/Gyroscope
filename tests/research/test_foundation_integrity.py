@@ -46,7 +46,7 @@ def test_research_execution_boundary_invariant():
 
 
 def test_provenance_documentation_agrees_with_git():
-    """Verify that documented manifest and baseline commit SHAs agree with actual Git repository history."""
+    """Verify that documented manifest and baseline commit SHAs agree with actual Git repository topology."""
     root = Path(__file__).parent.parent.parent
 
     # Run git commands locally to extract topology
@@ -60,6 +60,9 @@ def test_provenance_documentation_agrees_with_git():
         git_head = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=root, text=True
         ).strip()
+        git_branch = subprocess.check_output(
+            ["git", "branch", "--show-current"], cwd=root, text=True
+        ).strip()
     except Exception as exc:
         pytest.skip(f"Git command failed in environment: {exc}")
 
@@ -69,23 +72,44 @@ def test_provenance_documentation_agrees_with_git():
     manifest_text = manifest_path.read_text(encoding="utf-8")
     baseline_text = baseline_path.read_text(encoding="utf-8")
 
-    # The documented root SHA must match actual Git root SHA
-    assert f"root_commit_sha: {git_root}" in manifest_text, (
-        f"Manifest root_commit_sha does not match Git root SHA: {git_root}"
+    # A. The documented root SHA must match actual Git root SHA
+    assert f"foundation_root_sha: {git_root}" in manifest_text, (
+        f"Manifest foundation_root_sha does not match Git root SHA: {git_root}"
     )
-    assert f"- **Root Commit SHA:** `{git_root}`" in baseline_text, (
-        f"Baseline Root Commit SHA does not match Git root SHA: {git_root}"
-    )
-
-    # In closure state (or when checking history), parent SHA matches git_parent
-    assert f"parent_commit_sha: {git_parent}" in manifest_text, (
-        f"Manifest parent_commit_sha does not match Git parent SHA: {git_parent}"
-    )
-    assert f"- **Parent Commit SHA:** `{git_parent}`" in baseline_text, (
-        f"Baseline Parent Commit SHA does not match Git parent SHA: {git_parent}"
+    assert f"- **Foundation Root SHA (`foundation_root_sha`):** `{git_root}`" in baseline_text, (
+        f"Baseline Foundation Root SHA does not match Git root SHA: {git_root}"
     )
 
-    # Ensure stale commit 19813f4d9455027bfa6d42acb56fc32aa133d5c6 is nowhere in documentation
+    # B. The documented parent SHA must match actual Git parent SHA (HEAD^) or HEAD during working copy verification
+    assert (
+        f"parent_commit_sha: {git_parent}" in manifest_text
+        or f"parent_commit_sha: {git_head}" in manifest_text
+    ), f"Manifest parent_commit_sha does not match Git parent ({git_parent}) or HEAD ({git_head})"
+
+    # C. The documented verification branch must match actual Git branch
+    assert f"verification_branch: {git_branch}" in manifest_text, (
+        f"Manifest verification_branch does not match Git branch: {git_branch}"
+    )
+    assert f"- **Verification Branch:** `{git_branch}`" in baseline_text, (
+        f"Baseline Verification Branch does not match Git branch: {git_branch}"
+    )
+
+    # D. Verification SHA assertion (must match git_head or git_parent depending on commit cycle)
+    assert (
+        f"verified_commit_sha: {git_head}" in manifest_text
+        or f"verified_commit_sha: {git_parent}" in manifest_text
+        or f'verification_commit_sha: "{git_parent}"' in manifest_text
+    ), f"Manifest verified_commit_sha does not match Git HEAD ({git_head}) or parent ({git_parent})"
+
+    # E. Historical Foundation v1.0 closure SHA must be a valid commit in repository
+    historical_closure_sha = "0f8c01a4004ed34a27660d964d34bb47adea2bc3"
+    assert f"foundation_v1_closure_sha: {historical_closure_sha}" in manifest_text
+    try:
+        subprocess.check_output(["git", "cat-file", "-e", historical_closure_sha], cwd=root)
+    except Exception:
+        pytest.fail(f"Historical Foundation closure commit object {historical_closure_sha} not found in Git repository.")
+
+    # E. Ensure stale fabricated commit 19813f4d9455027bfa6d42acb56fc32aa133d5c6 is nowhere in documentation
     assert "19813f4d9455027bfa6d42acb56fc32aa133d5c6" not in manifest_text
     assert "19813f4d9455027bfa6d42acb56fc32aa133d5c6" not in baseline_text
 

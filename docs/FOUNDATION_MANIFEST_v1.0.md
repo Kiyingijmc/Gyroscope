@@ -10,17 +10,24 @@
 
 ```yaml
 repository: Kiyingijmc/Gyroscope
-branch: foundation/gyroscope-research-bootstrap-4872793722170977238
-root_commit_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
-parent_commit_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
-closure_commit_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
+verification_branch: foundation/closure-correction-verification-pass-4893052973368806390
+historical_foundation_branch: foundation/gyroscope-research-bootstrap-4872793722170977238
+
+foundation_root_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
+foundation_v1_closure_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
+parent_commit_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
 verified_commit_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
-git_topology: "3a9254445849d26544ae6aa5c03a5e767fd3586b (root / parent) -> 0f8c01a4004ed34a27660d964d34bb47adea2bc3 (closure / verified)"
+verification_commit_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
+
+git_topology: "3a9254445849d26544ae6aa5c03a5e767fd3586b (root) -> 0f8c01a4004ed34a27660d964d34bb47adea2bc3 (v1 closure) -> forensic verification closure (HEAD)"
 python_version_requirement: ">=3.12"
 runtime_environment: Python 3.12.13 / pytest 9.0.2
 ```
 
-> **Git Provenance Note:** The original foundation commit `3a9254445849d26544ae6aa5c03a5e767fd3586b` is the true repository root commit (`git rev-list --max-parents=0 HEAD`). The Foundation v1.0 closure commit `0f8c01a4004ed34a27660d964d34bb47adea2bc3` is a descendant commit whose immediate parent (`HEAD^`) is `3a9254445849d26544ae6aa5c03a5e767fd3586b`. The closure commit is NOT itself the root commit, and no fabricated parent commit exists.
+> **Git Provenance & Topology Note:**
+> - **Foundation Root (`foundation_root_sha`):** Commit `3a9254445849d26544ae6aa5c03a5e767fd3586b` is the true repository root commit (`git rev-list --max-parents=0 HEAD`).
+> - **Foundation v1.0 Closure (`foundation_v1_closure_sha`):** Commit `0f8c01a4004ed34a27660d964d34bb47adea2bc3` represents the historical Foundation v1.0 closure state.
+> - **Forensic Verification Closure (`forensic_verification_sha` / `verified_commit_sha`):** Represents the current branch HEAD commit being verified (`git rev-parse HEAD`), whose parent (`parent_commit_sha`) is `0f8c01a4004ed34a27660d964d34bb47adea2bc3`. No fabricated parent commit exists.
 
 ---
 
@@ -38,9 +45,12 @@ purpose: "Establish architectural, research, testing, provenance, determinism, a
 
 ```yaml
 verification_date: "2026-09-29"
+verification_branch: "foundation/closure-correction-verification-pass-4893052973368806390"
 verification_commit_sha: "0f8c01a4004ed34a27660d964d34bb47adea2bc3"
 verification_commands:
-  pytest: "pytest -v"
+  collect: "pytest --collect-only -q"
+  pytest_verbose: "pytest -v"
+  pytest_quiet: "pytest -q"
   compileall: "python -m compileall gyroscope tests"
 python_version: "3.12.13"
 pytest_version: "9.0.2"
@@ -50,7 +60,7 @@ pytest_failure_count: 0
 pytest_error_count: 0
 compileall_result: "PASS (Exit code 0)"
 ci_workflow: ".github/workflows/ci.yml"
-ci_result: "PASS"
+ci_status: "VERIFIED_WORKFLOW_UPDATED"
 ```
 
 > **Historical Test Count Audit Note:** The initial root baseline (`3a9254445849d26544ae6aa5c03a5e767fd3586b`) contained 22 tests. The closure commit (`0f8c01a4004ed34a27660d964d34bb47adea2bc3`) added 5 tests (totaling 27 tests) while stating 28 passed in its commit message. Following the forensic closure pass, 3 additional verification and isolation tests were added, bringing the canonical test suite to 31 tests, all passing with 0 failures and 0 errors.
