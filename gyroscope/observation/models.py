@@ -1,20 +1,55 @@
-"""Canonical market data observations and causal validation."""
+"""Canonical market data observations, causal validation, and deterministic identity derivation."""
 
 from dataclasses import dataclass, field
+import hashlib
+import json
 from typing import Any, Dict, Optional
-import uuid
 
 from gyroscope.core.exceptions import CausalViolationError
 
 
+def compute_deterministic_observation_id(
+    source: str,
+    symbol: str,
+    timeframe: str,
+    event_timestamp_ns: int,
+    arrival_timestamp_ns: int,
+    sequence_number: int,
+    price: float,
+    volume: float = 0.0,
+    source_version: str = "1.0.0",
+    metadata: Optional[Dict[str, Any]] = None,
+    parent_observation_id: Optional[str] = None,
+) -> str:
+    """Derive a canonical, deterministic, SHA-256 observation identifier."""
+    meta_payload = metadata or {}
+    canonical_dict = {
+        "arrival_timestamp_ns": arrival_timestamp_ns,
+        "event_timestamp_ns": event_timestamp_ns,
+        "metadata": meta_payload,
+        "parent_observation_id": parent_observation_id or "",
+        "price": f"{price:.8f}",
+        "sequence_number": sequence_number,
+        "source": source,
+        "source_version": source_version,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "volume": f"{volume:.8f}",
+    }
+    canonical_json = json.dumps(canonical_dict, sort_keys=True, separators=(",", ":"))
+    h = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+    return f"obs_{h[:32]}"
+
+
 @dataclass(frozen=True)
 class Observation:
-    """Canonical observation data model with four-timestamp causal contract.
+    """Canonical observation data model with four-timestamp causal contract and deterministic identity.
 
     Invariants:
       1. event_timestamp_ns <= arrival_timestamp_ns
       2. event_timestamp_ns <= processing_timestamp_ns
       3. decision_timestamp_ns >= processing_timestamp_ns if provided
+      4. observation_id is canonically derived when not explicitly provided
     """
     observation_id: str
     symbol: str
@@ -68,11 +103,26 @@ class Observation:
         volume: float = 0.0,
         sequence_number: int = 0,
         source: str = "DIRECT",
+        source_version: str = "1.0.0",
         observation_id: Optional[str] = None,
+        parent_observation_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> "Observation":
-        """Factory method to build a validated canonical observation."""
-        obs_id = observation_id or f"obs_{uuid.uuid4().hex}"
+        """Factory method to build a validated canonical observation with deterministic identity derivation."""
+        meta = metadata or {}
+        obs_id = observation_id or compute_deterministic_observation_id(
+            source=source,
+            symbol=symbol,
+            timeframe=timeframe,
+            event_timestamp_ns=event_timestamp_ns,
+            arrival_timestamp_ns=arrival_timestamp_ns,
+            sequence_number=sequence_number,
+            price=price,
+            volume=volume,
+            source_version=source_version,
+            metadata=meta,
+            parent_observation_id=parent_observation_id,
+        )
         bid_val = price if bid is None else bid
         ask_val = price if ask is None else ask
         spread_val = max(0.0, ask_val - bid_val)
@@ -91,5 +141,7 @@ class Observation:
             spread=spread_val,
             volume=volume,
             source=source,
-            metadata=metadata or {},
+            source_version=source_version,
+            parent_observation_id=parent_observation_id,
+            metadata=meta,
         )

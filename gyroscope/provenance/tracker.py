@@ -1,15 +1,38 @@
-"""Provenance node tracking and causal lineage primitives."""
+"""Provenance node tracking, causal lineage primitives, and deterministic node identity."""
 
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from typing import Any, Dict, List, Optional
-import uuid
+
+
+def compute_deterministic_provenance_id(
+    artifact_type: str,
+    timestamp_ns: int,
+    git_commit_sha: str,
+    config_hash: str,
+    model_version: str,
+    parent_node_ids: List[str],
+    payload: Dict[str, Any],
+) -> str:
+    """Derive a canonical, deterministic SHA-256 provenance node identifier."""
+    canonical_dict = {
+        "artifact_type": artifact_type,
+        "config_hash": config_hash,
+        "git_commit_sha": git_commit_sha,
+        "model_version": model_version,
+        "parent_node_ids": sorted(parent_node_ids),
+        "payload": payload,
+        "timestamp_ns": timestamp_ns,
+    }
+    canonical_json = json.dumps(canonical_dict, sort_keys=True, separators=(",", ":"))
+    h = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+    return f"prov_{h[:32]}"
 
 
 @dataclass(frozen=True)
 class ProvenanceNode:
-    """Immutable lineage record for decision artifacts."""
+    """Immutable lineage record for decision artifacts with deterministic identity derivation."""
     node_id: str
     parent_node_ids: List[str]
     timestamp_ns: int
@@ -44,8 +67,16 @@ class ProvenanceTracker:
         node_id: Optional[str] = None,
     ) -> ProvenanceNode:
         """Record a new decision artifact in the provenance lineage."""
-        nid = node_id or f"prov_{uuid.uuid4().hex}"
         parents = parent_node_ids or []
+        nid = node_id or compute_deterministic_provenance_id(
+            artifact_type=artifact_type,
+            timestamp_ns=timestamp_ns,
+            git_commit_sha=self.git_commit_sha,
+            config_hash=self.config_hash,
+            model_version=self.model_version,
+            parent_node_ids=parents,
+            payload=payload,
+        )
         node = ProvenanceNode(
             node_id=nid,
             parent_node_ids=parents,

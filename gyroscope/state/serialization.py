@@ -1,31 +1,43 @@
 """State serialization and deserialization routines adhering to STATE_SERIALIZATION_CONTRACT."""
 
+import hashlib
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from gyroscope.core.exceptions import StateCorruptedException, VersionMismatchError
 from gyroscope.state.base import SystemState
 
 
+def compute_snapshot_hash(snapshot_data: Dict[str, Any]) -> str:
+    """Compute canonical SHA-256 hash of a snapshot envelope."""
+    canonical_str = json.dumps(snapshot_data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
+
 def serialize_state(state: SystemState) -> str:
-    """Serialize system state into a canonical versioned JSON string."""
+    """Serialize system state into a canonical versioned JSON string with dual hash contracts."""
     state_hash = state.compute_state_hash()
+    payload_hash = state.compute_state_payload_hash()
+
     data: Dict[str, Any] = {
-        "schema_version": state.schema_version,
-        "model_version": state.model_version,
+        "configuration_hash": state.configuration_hash,
         "feature_version": state.feature_version,
-        "symbol": state.symbol,
-        "timeframe": state.timeframe,
         "last_event_id": state.last_event_id,
         "last_event_timestamp_ns": state.last_event_timestamp_ns,
+        "model_version": state.model_version,
+        "schema_version": state.schema_version,
         "sequence_number": state.sequence_number,
         "state_hash": state_hash,
-        "configuration_hash": state.configuration_hash,
         "state_payload": {
             "custom_state": state.custom_state,
             "processed_event_ids": sorted(list(state._processed_event_ids)),
         },
+        "state_payload_hash": payload_hash,
+        "symbol": state.symbol,
+        "timeframe": state.timeframe,
     }
+    snapshot_hash = compute_snapshot_hash(data)
+    data["snapshot_hash"] = snapshot_hash
     return json.dumps(data, sort_keys=True, indent=2)
 
 
@@ -35,7 +47,7 @@ def deserialize_state(
     expected_model_version: str = "1.0.0",
     expected_config_hash: str = None,
 ) -> SystemState:
-    """Deserialize state JSON string and verify state hash and version invariants."""
+    """Deserialize state JSON string and verify state hash, payload hash, and version invariants."""
     try:
         data = json.loads(json_str)
     except Exception as err:
@@ -77,11 +89,18 @@ def deserialize_state(
         _processed_event_ids=set(processed_event_ids),
     )
 
-    computed_hash = state.compute_state_hash()
-    header_hash = data.get("state_hash")
-    if computed_hash != header_hash:
+    computed_state_hash = state.compute_state_hash()
+    header_state_hash = data.get("state_hash")
+    if computed_state_hash != header_state_hash:
         raise StateCorruptedException(
-            f"State hash integrity failure: header state_hash '{header_hash}' does not match computed state_hash '{computed_hash}'"
+            f"State hash integrity failure: header state_hash '{header_state_hash}' does not match computed state_hash '{computed_state_hash}'"
+        )
+
+    computed_payload_hash = state.compute_state_payload_hash()
+    header_payload_hash = data.get("state_payload_hash")
+    if header_payload_hash and computed_payload_hash != header_payload_hash:
+        raise StateCorruptedException(
+            f"State payload hash integrity failure: header state_payload_hash '{header_payload_hash}' does not match computed '{computed_payload_hash}'"
         )
 
     return state

@@ -1,4 +1,4 @@
-"""Deterministic state machine concepts and state wrapper."""
+"""Deterministic state machine concepts, event identity derivation, and canonical state contracts."""
 
 from dataclasses import dataclass, field
 import hashlib
@@ -12,19 +12,74 @@ from gyroscope.core.exceptions import (
 )
 
 
+def compute_deterministic_event_id(
+    event_type: str,
+    event_timestamp_ns: int,
+    payload: Dict[str, Any],
+    observation_id: Optional[str] = None,
+    source: str = "DEFAULT",
+    sequence_number: int = 0,
+) -> str:
+    """Derive a canonical, deterministic SHA-256 event identifier."""
+    canonical_dict = {
+        "event_timestamp_ns": event_timestamp_ns,
+        "event_type": event_type,
+        "observation_id": observation_id or "",
+        "payload": payload,
+        "sequence_number": sequence_number,
+        "source": source,
+    }
+    canonical_json = json.dumps(canonical_dict, sort_keys=True, separators=(",", ":"))
+    h = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+    return f"evt_{h[:32]}"
+
+
 @dataclass(frozen=True)
 class Event:
-    """Deterministic Event representation."""
+    """Deterministic Event representation with derived canonical identity."""
     event_id: str
     event_type: str
     event_timestamp_ns: int
     observation_id: Optional[str] = None
+    sequence_number: int = 0
+    source: str = "DEFAULT"
     payload: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def create(
+        cls,
+        event_type: str,
+        event_timestamp_ns: int,
+        payload: Optional[Dict[str, Any]] = None,
+        observation_id: Optional[str] = None,
+        sequence_number: int = 0,
+        source: str = "DEFAULT",
+        event_id: Optional[str] = None,
+    ) -> "Event":
+        """Factory method to build a validated canonical event with deterministic identity derivation."""
+        p = payload or {}
+        eid = event_id or compute_deterministic_event_id(
+            event_type=event_type,
+            event_timestamp_ns=event_timestamp_ns,
+            payload=p,
+            observation_id=observation_id,
+            source=source,
+            sequence_number=sequence_number,
+        )
+        return cls(
+            event_id=eid,
+            event_type=event_type,
+            event_timestamp_ns=event_timestamp_ns,
+            observation_id=observation_id,
+            sequence_number=sequence_number,
+            source=source,
+            payload=p,
+        )
 
 
 @dataclass
 class SystemState:
-    """Deterministic system state holder with canonical hash calculation and event tracking."""
+    """Deterministic system state holder with canonical semantic payload hashing and snapshot hashing."""
     schema_version: str = "1.0"
     model_version: str = "1.0.0"
     feature_version: str = "1.0.0"
@@ -41,20 +96,34 @@ class SystemState:
         """Check if an event has already been processed (idempotency check)."""
         return event_id in self._processed_event_ids
 
-    def compute_state_hash(self) -> str:
-        """Calculate canonical SHA-256 hash of the mutable state payload."""
+    def compute_state_payload_hash(self) -> str:
+        """Calculate canonical SHA-256 hash of the semantic state payload alone."""
         payload = {
-            "schema_version": self.schema_version,
-            "model_version": self.model_version,
+            "custom_state": self.custom_state,
             "feature_version": self.feature_version,
+            "model_version": self.model_version,
+            "processed_event_ids": sorted(list(self._processed_event_ids)),
+            "schema_version": self.schema_version,
             "symbol": self.symbol,
             "timeframe": self.timeframe,
-            "sequence_number": self.sequence_number,
-            "last_event_id": self.last_event_id,
-            "last_event_timestamp_ns": self.last_event_timestamp_ns,
+        }
+        canonical_str = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
+    def compute_state_hash(self) -> str:
+        """Calculate canonical SHA-256 state hash including sequence and configuration header context."""
+        payload = {
             "configuration_hash": self.configuration_hash,
             "custom_state": self.custom_state,
+            "feature_version": self.feature_version,
+            "last_event_id": self.last_event_id,
+            "last_event_timestamp_ns": self.last_event_timestamp_ns,
+            "model_version": self.model_version,
             "processed_event_ids": sorted(list(self._processed_event_ids)),
+            "schema_version": self.schema_version,
+            "sequence_number": self.sequence_number,
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
         }
         canonical_str = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
