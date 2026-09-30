@@ -1,4 +1,4 @@
-"""Provenance node tracking, causal lineage primitives, and deterministic node identity with deep immutability."""
+"""Provenance node tracking, causal lineage primitives, and deterministic node identity with deep immutability and cryptographic content-binding."""
 
 from dataclasses import dataclass, field
 import hashlib
@@ -94,7 +94,7 @@ def compute_deterministic_provenance_id(
 
 @dataclass(frozen=True)
 class ProvenanceNode:
-    """Deeply immutable lineage record for decision artifacts with deterministic identity derivation."""
+    """Deeply immutable lineage record for decision artifacts with cryptographic identity binding."""
     node_id: str
     parent_node_ids: Tuple[str, ...]
     timestamp_ns: int
@@ -118,6 +118,22 @@ class ProvenanceNode:
     ):
         frozen_parents = tuple(sorted(list(parent_node_ids)))
         frozen_pld = payload if isinstance(payload, FrozenDict) else FrozenDict(payload)
+
+        computed_id = compute_deterministic_provenance_id(
+            artifact_type=artifact_type,
+            timestamp_ns=timestamp_ns,
+            git_commit_sha=git_commit_sha,
+            config_hash=config_hash,
+            model_version=model_version,
+            parent_node_ids=frozen_parents,
+            payload=frozen_pld,
+        )
+
+        if node_id != computed_id:
+            raise ValueError(
+                f"Cryptographic provenance identity mismatch: provided node_id '{node_id}' "
+                f"does not match computed canonical node_id '{computed_id}'"
+            )
 
         canonical_str = json.dumps(frozen_pld.to_dict(), sort_keys=True, separators=(",", ":"))
         pld_hash = hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
@@ -152,7 +168,7 @@ class ProvenanceTracker:
     ) -> ProvenanceNode:
         """Record a new decision artifact in the provenance lineage."""
         parents = tuple(parent_node_ids or ())
-        nid = node_id or compute_deterministic_provenance_id(
+        computed_nid = compute_deterministic_provenance_id(
             artifact_type=artifact_type,
             timestamp_ns=timestamp_ns,
             git_commit_sha=self.git_commit_sha,
@@ -161,6 +177,9 @@ class ProvenanceTracker:
             parent_node_ids=parents,
             payload=payload,
         )
+
+        nid = node_id or computed_nid
+
         node = ProvenanceNode(
             node_id=nid,
             parent_node_ids=parents,

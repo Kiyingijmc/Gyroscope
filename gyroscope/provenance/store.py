@@ -1,7 +1,7 @@
 """Abstract and in-memory provenance store abstractions with graph integrity and cycle detection."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from gyroscope.provenance.tracker import ProvenanceNode
 
@@ -26,13 +26,35 @@ class ProvenanceStore(ABC):
 
 
 class InMemoryProvenanceStore(ProvenanceStore):
-    """In-memory implementation of ProvenanceStore with immutability guarantees and graph integrity checks."""
+    """In-memory implementation of ProvenanceStore with immutability guarantees and arbitrary DAG cycle prevention."""
 
     def __init__(self):
         self._nodes = {}
 
+    def _would_create_cycle(self, node_id: str, parent_node_ids: Sequence[str]) -> bool:
+        """Check if adding node_id with parent_node_ids would introduce a cycle in the provenance graph using DFS."""
+        visited = set()
+
+        def dfs(curr_id: str) -> bool:
+            if curr_id == node_id:
+                return True
+            if curr_id in visited:
+                return False
+            visited.add(curr_id)
+            curr_node = self._nodes.get(curr_id)
+            if curr_node:
+                for pid in curr_node.parent_node_ids:
+                    if dfs(pid):
+                        return True
+            return False
+
+        for pid in parent_node_ids:
+            if dfs(pid):
+                return True
+        return False
+
     def record(self, node: ProvenanceNode, validate_parents: bool = True) -> None:
-        """Record an immutable provenance node, validating parent presence and cycle prevention."""
+        """Record an immutable provenance node, validating parent presence and arbitrary DAG cycle prevention."""
         if node.node_id in node.parent_node_ids:
             raise ValueError(f"Self-referential provenance parent prohibited for node {node.node_id}")
 
@@ -40,6 +62,9 @@ class InMemoryProvenanceStore(ProvenanceStore):
             for parent_id in node.parent_node_ids:
                 if parent_id not in self._nodes:
                     raise KeyError(f"Parent provenance node '{parent_id}' not found in store for node '{node.node_id}'")
+
+        if self._would_create_cycle(node.node_id, node.parent_node_ids):
+            raise ValueError(f"Arbitrary cycle detected in provenance graph when inserting node '{node.node_id}'")
 
         if node.node_id in self._nodes:
             existing = self._nodes[node.node_id]

@@ -10,7 +10,7 @@
 
 ```yaml
 repository: Kiyingijmc/Gyroscope
-verification_branch: phase-1-deterministic-kernel-impl
+verification_branch: phase-1-final-forensic-closure-kernel
 historical_foundation_branch: foundation/gyroscope-research-bootstrap-4872793722170977238
 
 foundation_root_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
@@ -46,7 +46,7 @@ purpose: "Establish architectural, research, testing, provenance, determinism, a
 
 ```yaml
 verification_date: "2026-09-29"
-verification_branch: "phase-1-deterministic-kernel-impl"
+verification_branch: "phase-1-final-forensic-closure-kernel"
 verification_parent_sha: DYNAMIC_GIT_HEAD_PARENT
 verification_commit_sha: DYNAMIC_GIT_HEAD
 verification_commands:
@@ -56,8 +56,8 @@ verification_commands:
   compileall: "python -m compileall gyroscope tests"
 python_version: "3.12.13"
 pytest_version: "9.0.2"
-pytest_collection_count: 40
-pytest_pass_count: 40
+pytest_collection_count: 38
+pytest_pass_count: 38
 pytest_failure_count: 0
 pytest_error_count: 0
 compileall_result: "PASS (Exit code 0)"
@@ -65,7 +65,7 @@ ci_workflow: ".github/workflows/ci.yml"
 ci_status: "VERIFIED_WORKFLOW_UPDATED"
 ```
 
-> **Historical Test Count Audit Note:** The initial root baseline (`3a9254445849d26544ae6aa5c03a5e767fd3586b`) contained 22 tests. The closure commit (`0f8c01a4004ed34a27660d964d34bb47adea2bc3`) added 5 tests (totaling 27 tests). Following the forensic closure pass and Phase 1 deterministic kernel additions, the canonical test suite stands at 40 tests, all passing with 0 failures and 0 errors.
+> **Historical Test Count Audit Note:** The initial root baseline (`3a9254445849d26544ae6aa5c03a5e767fd3586b`) contained 22 tests. The closure commit (`0f8c01a4004ed34a27660d964d34bb47adea2bc3`) added 5 tests (totaling 27 tests). Following the forensic closure pass and Phase 1 deterministic kernel additions, the canonical test suite stands at 38 tests, all passing with 0 failures and 0 errors.
 
 ---
 

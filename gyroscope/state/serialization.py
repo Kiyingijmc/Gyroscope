@@ -48,7 +48,7 @@ def deserialize_state(
     expected_model_version: str = "1.0.0",
     expected_config_hash: str = None,
 ) -> SystemState:
-    """Deserialize state JSON string and independently verify snapshot envelope hash, state hash, payload hash, and version invariants."""
+    """Deserialize state JSON string and independently verify snapshot envelope hash, state hash, mandatory payload hash, and version invariants."""
     try:
         data = json.loads(json_str)
     except Exception as err:
@@ -68,7 +68,12 @@ def deserialize_state(
             f"Snapshot envelope integrity failure: header snapshot_hash '{header_snapshot_hash}' does not match computed snapshot_hash '{computed_snapshot_hash}'"
         )
 
-    # 2. Version and Metadata Validation
+    # 2. Mandatory State Payload Hash Check
+    header_payload_hash = data.get("state_payload_hash")
+    if not header_payload_hash:
+        raise StateCorruptedException("Missing mandatory 'state_payload_hash' field in serialized snapshot envelope.")
+
+    # 3. Version and Metadata Validation
     schema_version = data.get("schema_version")
     if schema_version != expected_schema_version:
         raise VersionMismatchError(
@@ -108,7 +113,7 @@ def deserialize_state(
         _processed_event_ids=set(processed_event_ids),
     )
 
-    # 3. State Header Hash Integrity Verification
+    # 4. State Header Hash Integrity Verification
     computed_state_hash = state.compute_state_hash()
     header_state_hash = data.get("state_hash")
     if computed_state_hash != header_state_hash:
@@ -116,10 +121,9 @@ def deserialize_state(
             f"State hash integrity failure: header state_hash '{header_state_hash}' does not match computed state_hash '{computed_state_hash}'"
         )
 
-    # 4. State Payload Hash Integrity Verification
+    # 5. State Payload Hash Integrity Verification
     computed_payload_hash = state.compute_state_payload_hash()
-    header_payload_hash = data.get("state_payload_hash")
-    if header_payload_hash and computed_payload_hash != header_payload_hash:
+    if computed_payload_hash != header_payload_hash:
         raise StateCorruptedException(
             f"State payload hash integrity failure: header state_payload_hash '{header_payload_hash}' does not match computed '{computed_payload_hash}'"
         )

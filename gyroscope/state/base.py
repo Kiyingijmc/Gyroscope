@@ -83,8 +83,10 @@ class SystemState:
 
     Sequence Semantics:
       - SystemState.sequence_number represents the highest authoritative event sequence number incorporated into the state.
-      - For sequence-bearing events (sequence_number > 0), sequence_number updates to event.sequence_number.
-      - For sequence_number == 0 events (e.g. unsequenced tick/heartbeat), sequence_number increments by 1 if event sequence is 0.
+      - Authoritative sequence state is strictly monotonic for sequence-bearing events (sequence_number > 0).
+      - Rejects sequence regressions (event.sequence_number < self.sequence_number) with DeterminismViolationError without state mutation.
+      - Duplicate sequence events with previously processed event_ids are safely suppressed idempotently.
+      - For unsequenced events (sequence_number == 0), sequence_number increments by 1.
     """
     schema_version: str = "1.0"
     model_version: str = "1.0.0"
@@ -135,13 +137,18 @@ class SystemState:
         return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
 
     def process_event(self, event: Event) -> bool:
-        """Process an event deterministically. Returns True if processed, False if duplicate skipped."""
+        """Process an event deterministically with strict sequence monotonicity enforcement."""
         if self.is_event_processed(event.event_id):
             return False
 
         if event.event_timestamp_ns < self.last_event_timestamp_ns:
             raise DeterminismViolationError(
                 f"Out-of-order event timestamp ({event.event_timestamp_ns}) is earlier than state last_event_timestamp_ns ({self.last_event_timestamp_ns})"
+            )
+
+        if event.sequence_number > 0 and event.sequence_number < self.sequence_number:
+            raise DeterminismViolationError(
+                f"Sequence regression detected: event sequence ({event.sequence_number}) is less than current authoritative state sequence ({self.sequence_number})"
             )
 
         if event.sequence_number > 0:
