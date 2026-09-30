@@ -110,7 +110,7 @@ def test_provenance_documentation_agrees_with_git():
     git_branch = subprocess.check_output(
         ["git", "branch", "--show-current"], cwd=root, text=True
     ).strip()
-    if not git_branch or git_branch == "HEAD" or "merge" in git_branch:
+    if not git_branch or git_branch == "HEAD" or is_synthetic_pr_merge_reference(git_branch):
         git_branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME", git_branch)
 
     manifest_path = root / "docs" / "FOUNDATION_MANIFEST_v1.0.md"
