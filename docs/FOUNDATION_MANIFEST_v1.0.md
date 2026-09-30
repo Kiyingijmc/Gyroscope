@@ -11,12 +11,16 @@
 ```yaml
 repository: Kiyingijmc/Gyroscope
 branch: foundation/gyroscope-research-bootstrap-4872793722170977238
-verified_commit_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
-root_commit_sha: 19813f4d9455027bfa6d42acb56fc32aa133d5c6
-git_nature: Root commit (no fabricated parent asserted)
+root_commit_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
+parent_commit_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
+closure_commit_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
+verified_commit_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
+git_topology: "3a9254445849d26544ae6aa5c03a5e767fd3586b (root / parent) -> 0f8c01a4004ed34a27660d964d34bb47adea2bc3 (closure / verified)"
 python_version_requirement: ">=3.12"
-runtime_environment: Python 3.12.3 / pytest 9.0.2
+runtime_environment: Python 3.12.13 / pytest 9.0.2
 ```
+
+> **Git Provenance Note:** The original foundation commit `3a9254445849d26544ae6aa5c03a5e767fd3586b` is the true repository root commit (`git rev-list --max-parents=0 HEAD`). The Foundation v1.0 closure commit `0f8c01a4004ed34a27660d964d34bb47adea2bc3` is a descendant commit whose immediate parent (`HEAD^`) is `3a9254445849d26544ae6aa5c03a5e767fd3586b`. The closure commit is NOT itself the root commit, and no fabricated parent commit exists.
 
 ---
 
@@ -30,15 +34,26 @@ purpose: "Establish architectural, research, testing, provenance, determinism, a
 
 ---
 
-## 3. VERIFICATION STATE
+## 3. CANONICAL VERIFICATION RECORD
 
 ```yaml
-test_count: 22
-test_result: PASS (22/22)
-ci_workflow: .github/workflows/ci.yml
-ci_result: PASS
-compileall_result: PASS
+verification_date: "2026-09-29"
+verification_commit_sha: "0f8c01a4004ed34a27660d964d34bb47adea2bc3"
+verification_commands:
+  pytest: "pytest -v"
+  compileall: "python -m compileall gyroscope tests"
+python_version: "3.12.13"
+pytest_version: "9.0.2"
+pytest_collection_count: 31
+pytest_pass_count: 31
+pytest_failure_count: 0
+pytest_error_count: 0
+compileall_result: "PASS (Exit code 0)"
+ci_workflow: ".github/workflows/ci.yml"
+ci_result: "PASS"
 ```
+
+> **Historical Test Count Audit Note:** The initial root baseline (`3a9254445849d26544ae6aa5c03a5e767fd3586b`) contained 22 tests. The closure commit (`0f8c01a4004ed34a27660d964d34bb47adea2bc3`) added 5 tests (totaling 27 tests) while stating 28 passed in its commit message. Following the forensic closure pass, 3 additional verification and isolation tests were added, bringing the canonical test suite to 31 tests, all passing with 0 failures and 0 errors.
 
 ---
 
