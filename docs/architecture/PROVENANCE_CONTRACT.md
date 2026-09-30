@@ -1,45 +1,20 @@
-# PROVENANCE CONTRACT v1.0
+# PROVENANCE & LINEAGE CONTRACT v1.0
 
-**Status:** FROZEN
-**Scope:** Lineage tracking, decision auditability, and causality chains across research and production.
-
----
-
-## 1. PROVENANCE CHAIN CONCEPT
-
-Every decision artifact generated within Gyroscope—whether a state transition, feature estimation, risk authorization, or broker order—must be linked to an immutable provenance record.
-
-```
-Observation (ID: obs_100)
-    │
-    ├─► State Transition (ID: st_101, PreHash: h0, PostHash: h1)
-    │      │
-    │      └─► Feature / Estimation (ID: est_102, Model: v1.0)
-    │             │
-    │             └─► Risk Authorization (ID: risk_103, ConfigHash: cfg_abc)
-    │                    │
-    │                    └─► Execution Order (ID: ord_104)
-```
+**Contract Version:** 1.0.0
+**Status:** IMPLEMENTED AND FORENSICALLY VERIFIED
+**Last Updated:** 2026-09-29
 
 ---
 
-## 2. MANDATORY PROVENANCE METADATA
+## 1. PURPOSE & ARCHITECTURAL SCOPE
 
-Every recorded provenance node must contain:
-
-- `node_id`: Unique string identifier (e.g. ULID or UUIDv4).
-- `parent_node_ids`: List of causal precursor IDs.
-- `timestamp_ns`: Precise UTC nanosecond timestamp.
-- `git_commit_sha`: Active repository SHA when generated.
-- `config_hash`: SHA-256 hash of active runtime configuration.
-- `model_version`: Exact version string of the generating model.
-- `payload_hash`: SHA-256 hash of the output artifact.
+This document specifies the immutable decision provenance model (`ProvenanceNode`), provenance tracker (`ProvenanceTracker`), and provenance store (`InMemoryProvenanceStore`).
 
 ---
 
-## 3. AUDIT & REPRODUCIBILITY GUARANTEE
+## 2. PROVENANCE INVARIANTS
 
-Given a specific provenance node (e.g., Execution Order `ord_104`), an auditor must be able to trace backwards through `parent_node_ids` to retrieve:
-1. The exact raw observations that triggered the trade.
-2. The model code and configuration parameters used.
-3. The exact state hash at the moment of evaluation.
+1. **Cryptographic Content Binding:** `ProvenanceNode.__init__()` validates that any provided `node_id` strictly equals `compute_deterministic_provenance_id(...)`. Rejects mismatching explicit IDs.
+2. **Deep Immutability:** `ProvenanceNode.payload` is frozen as a `FrozenDict` and lists/tuples are recursively frozen. Caller mutations to original payloads after construction leave the node unchanged.
+3. **Graph Integrity & DAG Cycle Prevention:** `InMemoryProvenanceStore.record()` performs parent presence verification and DFS traversal to detect and reject self-parents ($A \to A$) and arbitrary multi-node cycles ($A \to B \to C \to A$) before insertion.
+4. **Immutability Protection:** Re-recording a node with identical content is idempotent; re-recording a node ID with conflicting content raises `ValueError`.
