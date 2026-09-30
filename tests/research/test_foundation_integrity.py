@@ -12,6 +12,48 @@ from gyroscope.observation import Observation
 from gyroscope.state import Event, SystemState, deserialize_state, serialize_state
 
 
+def is_synthetic_pr_merge_reference(ref_str: str) -> bool:
+    """Validate whether ref_str is strictly a GitHub Actions synthetic PR merge reference."""
+    clean_ref = ref_str.strip()
+    if clean_ref.startswith("refs/pull/") and clean_ref.endswith("/merge"):
+        pr_id = clean_ref[len("refs/pull/"):-len("/merge")]
+        return pr_id.isdigit()
+    if clean_ref.startswith("pull/") and clean_ref.endswith("/merge"):
+        pr_id = clean_ref[len("pull/"):-len("/merge")]
+        return pr_id.isdigit()
+    if clean_ref.endswith("/merge"):
+        parts = clean_ref.split("/")
+        if len(parts) == 2 and parts[0].isdigit() and parts[1] == "merge":
+            return True
+    return False
+
+
+def test_synthetic_pr_merge_ref_validation():
+    """Verify exact acceptance of synthetic PR merge references and rejection of ordinary branches with 'merge'."""
+    accepted_cases = [
+        "refs/pull/3/merge",
+        "refs/pull/123/merge",
+        "refs/pull/9999/merge",
+        "pull/3/merge",
+        "3/merge",
+    ]
+    rejected_cases = [
+        "feature-merge",
+        "merge",
+        "feature-merge-security",
+        "refs/pull/foo/merge",
+        "refs/pull/3/not-merge",
+        "refs/pull/3/merge-extra",
+        "phase-1-forensic-closure-freeze-merge",
+    ]
+
+    for ref in accepted_cases:
+        assert is_synthetic_pr_merge_reference(ref) is True, f"Expected {ref!r} to be accepted as synthetic PR merge ref"
+
+    for ref in rejected_cases:
+        assert is_synthetic_pr_merge_reference(ref) is False, f"Expected {ref!r} to be REJECTED as synthetic PR merge ref"
+
+
 def test_foundation_package_structure():
     """Verify that required package directories and core files exist on disk."""
     root = Path(__file__).parent.parent.parent
@@ -94,6 +136,9 @@ def test_provenance_documentation_agrees_with_git():
         f"Parent commit SHA {git_parent} resolved from HEAD^ is not a valid commit object."
     )
 
+    # Helper to validate synthetic PR merge refs strictly
+    is_synthetic_pr_merge_ref = is_synthetic_pr_merge_reference(git_branch)
+
     # C. Verification branch must match actual Git branch family or exact branch
     is_valid_manifest_branch = (
         f"verification_branch: {git_branch}" in manifest_text
@@ -101,7 +146,7 @@ def test_provenance_documentation_agrees_with_git():
             "phase-1-forensic-closure-freeze" in git_branch
             and "verification_branch: phase-1-forensic-closure-freeze" in manifest_text
         )
-        or "merge" in git_branch
+        or is_synthetic_pr_merge_ref
     )
     assert is_valid_manifest_branch, f"Manifest verification_branch does not match Git branch: {git_branch}"
 
@@ -111,7 +156,7 @@ def test_provenance_documentation_agrees_with_git():
             "phase-1-forensic-closure-freeze" in git_branch
             and "- **Verification Branch:** `phase-1-forensic-closure-freeze" in baseline_text
         )
-        or "merge" in git_branch
+        or is_synthetic_pr_merge_ref
     )
     assert is_valid_baseline_branch, f"Baseline Verification Branch does not match Git branch: {git_branch}"
 
