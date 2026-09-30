@@ -5,7 +5,7 @@ from gyroscope.provenance.tracker import ProvenanceTracker
 
 def test_provenance_recording_and_ancestry_tracing():
     tracker = ProvenanceTracker(
-        git_commit_sha="19813f4d9455027bfa6d42acb56fc32aa133d5c6",
+        git_commit_sha="3a9254445849d26544ae6aa5c03a5e767fd3586b",
         config_hash="abc123hash",
         model_version="1.0.0",
     )
