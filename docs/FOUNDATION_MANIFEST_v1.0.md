@@ -15,11 +15,11 @@ historical_foundation_branch: foundation/gyroscope-research-bootstrap-4872793722
 
 foundation_root_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
 foundation_v1_closure_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
-verification_parent_sha: 2c9bf08e35ce469c5c80916caa800a0b6e9a54ee
+verification_parent_sha: d5e50a40c4f996d02b2810039331050396b0ae87
 verified_commit_sha: DYNAMIC_GIT_HEAD
 verification_commit_sha: DYNAMIC_GIT_HEAD
 
-git_topology: "3a9254445849d26544ae6aa5c03a5e767fd3586b (root) -> 0f8c01a4004ed34a27660d964d34bb47adea2bc3 (v1 closure) -> 2c9bf08e35ce469c5c80916caa800a0b6e9a54ee (verification parent) -> d5e50a40c4f996d02b2810039331050396b0ae87 (forensic closure HEAD)"
+git_topology: "3a9254445849d26544ae6aa5c03a5e767fd3586b (root) -> 0f8c01a4004ed34a27660d964d34bb47adea2bc3 (v1 closure) -> 2c9bf08e35ce469c5c80916caa800a0b6e9a54ee -> d5e50a40c4f996d02b2810039331050396b0ae87 (verification parent) -> forensic closure HEAD"
 python_version_requirement: ">=3.12"
 runtime_environment: Python 3.12.13 / pytest 9.0.2
 ```
@@ -27,7 +27,7 @@ runtime_environment: Python 3.12.13 / pytest 9.0.2
 > **Git Provenance & Topology Note:**
 > - **Foundation Root (`foundation_root_sha`):** Commit `3a9254445849d26544ae6aa5c03a5e767fd3586b` is the true repository root commit (`git rev-list --max-parents=0 HEAD`).
 > - **Foundation v1.0 Closure (`foundation_v1_closure_sha`):** Commit `0f8c01a4004ed34a27660d964d34bb47adea2bc3` represents the historical Foundation v1.0 closure state.
-> - **Verification Parent (`verification_parent_sha`):** Commit `2c9bf08e35ce469c5c80916caa800a0b6e9a54ee` is the direct parent of current commit `d5e50a40c4f996d02b2810039331050396b0ae87` (`git rev-parse HEAD^`).
+> - **Verification Parent (`verification_parent_sha`):** Commit `d5e50a40c4f996d02b2810039331050396b0ae87` is the direct parent of the current forensic verification HEAD (`git rev-parse HEAD^`).
 > - **Forensic Verification Closure (`forensic_verification_sha` / `verified_commit_sha`):** Represents the current branch HEAD commit being verified (`git rev-parse HEAD`), represented dynamically as `DYNAMIC_GIT_HEAD` to avoid self-referential cryptographic circularity.
 
 ---
@@ -47,7 +47,7 @@ purpose: "Establish architectural, research, testing, provenance, determinism, a
 ```yaml
 verification_date: "2026-09-29"
 verification_branch: "foundation/closure-correction-verification-pass-4893052973368806390"
-verification_parent_sha: "2c9bf08e35ce469c5c80916caa800a0b6e9a54ee"
+verification_parent_sha: "d5e50a40c4f996d02b2810039331050396b0ae87"
 verification_commit_sha: DYNAMIC_GIT_HEAD
 verification_commands:
   collect: "pytest --collect-only -q"
