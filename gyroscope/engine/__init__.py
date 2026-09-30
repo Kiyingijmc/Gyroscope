@@ -211,6 +211,15 @@ class ReplayResult:
     duplicate_count: int
     gap_events: Tuple[SequenceGapEvent, ...]
 
+    @property
+    def is_authoritative(self) -> bool:
+        """Explicit machine-readable authority boundary.
+
+        Only COMPLETE and COMPLETE_WITH_DUPLICATES produce authoritative state.
+        GAP_DETECTED, TIMESTAMP_REGRESSION_DETECTED, and FAILED states are strictly degraded/non-authoritative.
+        """
+        return self.status in (ReplayStatus.COMPLETE, ReplayStatus.COMPLETE_WITH_DUPLICATES)
+
 
 class DeterministicReplayEngine:
     """Pure deterministic event replay engine.
@@ -220,7 +229,7 @@ class DeterministicReplayEngine:
       - Orders events deterministically
       - Detects sequence gaps
       - Applies events through SystemState reducer
-      - Returns strongly typed ReplayResult
+      - Returns strongly typed ReplayResult with explicit is_authoritative boundary
       - Guarantees: Replay(E1...En) == Snapshot(Ek) + Replay(Ek+1...En)
     """
 
@@ -272,8 +281,12 @@ class DeterministicReplayEngine:
             gap_events=gap_events,
         )
 
+    def replay_stream_with_status(self, events: List[Event]) -> ReplayResult:
+        """Replay stream of events and return full ReplayResult with explicit authority boundary."""
+        self.submit_events(events)
+        return self.process_buffered_events()
+
     def replay_stream(self, events: List[Event]) -> SystemState:
         """Replay a stream of events cleanly from scratch or current state and return state for compatibility."""
-        self.submit_events(events)
-        res = self.process_buffered_events()
+        res = self.replay_stream_with_status(events)
         return res.final_state
