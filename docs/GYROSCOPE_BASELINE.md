@@ -1,6 +1,6 @@
 # GYROSCOPE BASELINE REPORT v1.0
 
-**Inspection Date / Timestamp:** 2026-09-29 / Foundation Closure Pass
+**Inspection Date / Timestamp:** 2026-09-29 / Phase 1 Final Forensic Closure Pass
 **Inspection Target:** Gyroscope Repository (Clean Repository Preparation)
 
 ---
@@ -8,7 +8,7 @@
 ## 1. REPOSITORY METADATA & ENVIRONMENT
 
 - **Repository Identity:** `Kiyingijmc/Gyroscope`
-- **Verification Branch:** `foundation/closure-correction-verification-pass-4893052973368806390`
+- **Verification Branch:** `phase-1-forensic-closure-remediation-20260930-13161173992979905829`
 - **Historical Foundation Branch:** `foundation/gyroscope-research-bootstrap-4872793722170977238`
 - **Foundation Root SHA (`foundation_root_sha`):** `3a9254445849d26544ae6aa5c03a5e767fd3586b`
 - **Foundation v1.0 Closure SHA (`foundation_v1_closure_sha`):** `0f8c01a4004ed34a27660d964d34bb47adea2bc3`
@@ -24,7 +24,7 @@
 
 - **Foundation Root:** The original foundation commit `3a9254445849d26544ae6aa5c03a5e767fd3586b` is the true repository root commit (`git rev-list --max-parents=0 HEAD`).
 - **Historical Foundation v1.0 Closure:** Commit `0f8c01a4004ed34a27660d964d34bb47adea2bc3` is the historical closure commit of the initial baseline.
-- **Forensic Verification Closure:** The current commit on branch `foundation/closure-correction-verification-pass-4893052973368806390` provides automated provenance verification, AST module-boundary isolation, and fresh subprocess independence testing.
+- **Forensic Verification Closure:** The current commit on branch `phase-1-final-forensic-closure-kernel` provides automated provenance verification, AST module-boundary isolation, and fresh subprocess independence testing.
 - **Parent Assertion:** No fabricated parent SHA or prior git history is asserted.
 - **Repository Slate:** The repository was initialized cleanly without legacy debt, ensuring an uncontaminated architectural foundation.
 
@@ -34,18 +34,19 @@
 
 The following core modules are physically implemented with active runtime code and verified unit/property tests:
 
-1. **`gyroscope/core/`**: Custom exceptions (`CausalViolationError`, `DeterminismViolationError`, `StateCorruptedException`, `AuthorityViolationError`), core domain types, and `ReadinessLevel` (R0–R4).
+1. **`gyroscope/core/`**: Custom exceptions (`CausalViolationError`, `DeterminismViolationError`, `StateCorruptedException`, `AuthorityViolationError`), core domain types, `ReadinessLevel` (R0–R4), numeric boundary (`numeric.py`), and state estimation interface (`estimation.py`).
 2. **`gyroscope/config/`**: `SystemConfig` supporting canonical JSON serialization and SHA-256 configuration hashing.
-3. **`gyroscope/observation/`**: `Observation` model enforcing the four-timestamp causal contract ($t_{\text{event}} \le t_{\text{arrival}} \le t_{\text{proc}} \le t_{\text{dec}}$).
-4. **`gyroscope/state/`**: `SystemState`, `Event`, SHA-256 state hashing, event deduplication/idempotency tracking, and canonical state serialization/deserialization routines.
-5. **`gyroscope/provenance/`**: `ProvenanceTracker` and `ProvenanceNode` for tracking causal decision lineage and parent ancestry graphs.
-6. **`gyroscope/logging/`**: `StructuredLogger` converting system events into structured JSON log telemetry.
+3. **`gyroscope/observation/`**: `Observation` model enforcing the four-timestamp causal contract ($t_{\text{event}} \le t_{\text{arrival}} \le t_{\text{proc}} \le t_{\text{dec}}$) and SHA-256 deterministic observation identity derivation.
+4. **`gyroscope/state/`**: `SystemState`, `Event` with deterministic event identity derivation, dual hashing contracts (`state_payload_hash` vs `state_hash` vs `snapshot_hash`), event deduplication/idempotency tracking, sequence monotonicity enforcement, and canonical state serialization/deserialization routines.
+5. **`gyroscope/engine/`**: `CausalOrderingBuffer`, `GapDetector`, `SnapshotStore`, and `DeterministicReplayEngine` satisfying snapshot / replay equivalence ($Replay(E_1..E_n) == Snapshot(E_k) + Replay(E_{k+1}..E_n)$) with strongly typed `ReplayResult`.
+6. **`gyroscope/provenance/`**: `ProvenanceTracker`, `ProvenanceNode` with cryptographic content-binding and deep immutability, and `ProvenanceStore` / `InMemoryProvenanceStore` with arbitrary DAG cycle prevention.
+7. **`gyroscope/logging/`**: `StructuredLogger` converting system events into structured JSON log telemetry.
 
 ---
 
-## 4. SPECIFIED ARCHITECTURE (DEFERRED / FUTURE WORK)
+## 4. SPECIFIED ARCHITECTURAL BOUNDARIES (DEFERRED TO PHASE 2)
 
-The following components are formally specified in architectural contracts (`docs/architecture/ GYROSCOPE_ARCHITECTURE_v1.0.md`) but are **not yet implemented as runtime engines** in order to preserve research safety:
+The following components are formally specified in architectural contracts (`docs/architecture/GYROSCOPE_ARCHITECTURE_v1.0.md`) but are **not yet implemented as runtime engines** in order to preserve research safety:
 
 - State Estimation / Kalman filter engine (`SPECIFIED_ONLY`)
 - Predictive Evidence Fabric (PEF) runtime (`SPECIFIED_ONLY`)
@@ -62,8 +63,8 @@ The following components are formally specified in architectural contracts (`doc
 
 - **Test Suite Verification Results (Canonical Closure Pass):**
   - Verification Commands: `pytest -v` and `python -m compileall gyroscope tests`
-  - Collected: 32 tests
-  - Passed: 32 tests
+  - Collected: 44 tests
+  - Passed: 44 tests
   - Failed: 0
   - Errors: 0
   - Compileall Exit Code: 0 (PASS)
