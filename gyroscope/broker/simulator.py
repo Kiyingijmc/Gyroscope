@@ -5,6 +5,7 @@ import hashlib
 from typing import Dict, List, Optional, Tuple
 
 from gyroscope.contracts.ports import BrokerAdapterPort
+from gyroscope.broker.repository import SQLiteFillRepository
 from gyroscope.contracts.types import (
     BrokerDeal,
     BrokerOrderRecord,
@@ -17,16 +18,19 @@ from gyroscope.core.numeric import assert_exact_financial_quantity, to_authorita
 
 
 class DeterministicBrokerSimulator(BrokerAdapterPort):
-    """Deterministic broker simulator supporting authoritative external fill identity, deduplication, and partial fill accounting."""
+    """Deterministic broker simulator supporting durable SQLite fill repository, authoritative external fill identity, deduplication, and partial fill accounting."""
 
-    def __init__(self, simulate_unknown: bool = False, simulate_rejection: bool = False) -> None:
+    def __init__(
+        self,
+        simulate_unknown: bool = False,
+        simulate_rejection: bool = False,
+        fill_repository: Optional[SQLiteFillRepository] = None,
+    ) -> None:
         self.simulate_unknown = simulate_unknown
         self.simulate_rejection = simulate_rejection
+        self.fill_repository = fill_repository or SQLiteFillRepository(":memory:")
         self._orders_by_broker_id: Dict[str, BrokerOrderRecord] = {}
         self._broker_id_by_intent_id: Dict[str, str] = {}
-        self._deals_by_broker_id: Dict[str, List[BrokerDeal]] = {}
-        # Authoritative external fill deduplication store: (broker_id, external_execution_id) -> BrokerDeal
-        self._seen_external_deals: Dict[Tuple[str, str], BrokerDeal] = {}
 
     def submit_intent(self, intent: ExecutionIntent) -> BrokerOrderRecord:
         """Submit intent to broker boundary and receive deterministic order record."""
@@ -36,7 +40,6 @@ class DeterministicBrokerSimulator(BrokerAdapterPort):
 
         broker_order_id = f"ord_sim_{hashlib.sha256(intent.intent_id.encode()).hexdigest()[:16]}"
         self._broker_id_by_intent_id[intent.intent_id] = broker_order_id
-        self._deals_by_broker_id[broker_order_id] = []
 
         if self.simulate_unknown:
             status = OrderStatus.UNKNOWN
@@ -50,7 +53,6 @@ class DeterministicBrokerSimulator(BrokerAdapterPort):
             status = OrderStatus.FILLED
             filled_qty = intent.quantity
             avg_price = intent.limit_price or Decimal("50000.00000000")
-            # Generate full deal with authoritative external execution ID
             ext_exec_id = f"ext_exec_{hashlib.sha256(f'{broker_order_id}:full'.encode()).hexdigest()[:16]}"
             deal = BrokerDeal(
                 deal_id=ext_exec_id,
@@ -64,8 +66,7 @@ class DeterministicBrokerSimulator(BrokerAdapterPort):
                 fee_currency="USD",
                 executed_at_ns=intent.created_at_ns + 100,
             )
-            self._deals_by_broker_id[broker_order_id].append(deal)
-            self._seen_external_deals[("BROKER_SIM", ext_exec_id)] = deal
+            self.fill_repository.save_deal("BROKER_SIM", deal)
 
         raw_hash = hashlib.sha256(f"{broker_order_id}:{status.value}:{filled_qty:.8f}".encode()).hexdigest()
 
@@ -96,7 +97,7 @@ class DeterministicBrokerSimulator(BrokerAdapterPort):
         external_execution_id: Optional[str] = None,
         broker_id: str = "BROKER_SIM",
     ) -> Tuple[BrokerOrderRecord, BrokerDeal]:
-        """Execute a partial fill with authoritative external execution ID and idempotent deduplication."""
+        """Execute a partial fill with durable SQLite repository deduplication."""
         existing = self._orders_by_broker_id.get(broker_order_id)
         if not existing:
             raise ValueError(f"Unknown broker order ID: {broker_order_id}")
@@ -104,28 +105,8 @@ class DeterministicBrokerSimulator(BrokerAdapterPort):
         assert_exact_financial_quantity(fill_quantity)
         assert_exact_financial_quantity(fill_price)
 
-        deals = self._deals_by_broker_id[broker_order_id]
-        ext_exec_id = external_execution_id or f"ext_exec_{hashlib.sha256(f'{broker_order_id}:{len(deals)+1}'.encode()).hexdigest()[:16]}"
-        dedup_key = (broker_id, ext_exec_id)
-
-        # Idempotent deduplication check
-        if dedup_key in self._seen_external_deals:
-            existing_deal = self._seen_external_deals[dedup_key]
-            if existing_deal.fill_quantity != fill_quantity or existing_deal.fill_price != fill_price:
-                raise ValueError(
-                    f"Conflicting external fill received for {dedup_key}: "
-                    f"existing ({existing_deal.fill_quantity} @ {existing_deal.fill_price}) != new ({fill_quantity} @ {fill_price})"
-                )
-            return existing, existing_deal
-
-        new_filled_qty = existing.filled_quantity + fill_quantity
-        if new_filled_qty > existing.requested_quantity:
-            raise ValueError(
-                f"Overfill error: new filled quantity ({new_filled_qty}) exceeds requested quantity ({existing.requested_quantity})"
-            )
-
-        total_val = sum((d.fill_quantity * d.fill_price for d in deals), Decimal("0.00000000")) + (fill_quantity * fill_price)
-        avg_price = total_val / new_filled_qty
+        existing_deals = self.fill_repository.get_deals_for_order(broker_order_id)
+        ext_exec_id = external_execution_id or f"ext_exec_{hashlib.sha256(f'{broker_order_id}:{len(existing_deals)+1}'.encode()).hexdigest()[:16]}"
 
         deal = BrokerDeal(
             deal_id=ext_exec_id,
@@ -139,8 +120,27 @@ class DeterministicBrokerSimulator(BrokerAdapterPort):
             fee_currency="USD",
             executed_at_ns=executed_at_ns,
         )
-        deals.append(deal)
-        self._seen_external_deals[dedup_key] = deal
+
+        existing_deal = self.fill_repository.get_deal(broker_id, ext_exec_id)
+        if existing_deal:
+            if existing_deal.fill_quantity != fill_quantity or existing_deal.fill_price != fill_price:
+                raise ValueError(
+                    f"Conflicting external fill received for ({broker_id}, {ext_exec_id}): "
+                    f"existing ({existing_deal.fill_quantity} @ {existing_deal.fill_price}) != new ({fill_quantity} @ {fill_price})"
+                )
+            return existing, existing_deal
+
+        self.fill_repository.save_deal(broker_id, deal)
+
+        deals = self.fill_repository.get_deals_for_order(broker_order_id)
+        new_filled_qty = sum((d.fill_quantity for d in deals), Decimal("0.00000000"))
+        if new_filled_qty > existing.requested_quantity:
+            raise ValueError(
+                f"Overfill error: new filled quantity ({new_filled_qty}) exceeds requested quantity ({existing.requested_quantity})"
+            )
+
+        total_val = sum((d.fill_quantity * d.fill_price for d in deals), Decimal("0.00000000"))
+        avg_price = total_val / new_filled_qty
 
         status = OrderStatus.FILLED if new_filled_qty == existing.requested_quantity else OrderStatus.PARTIALLY_FILLED
         raw_hash = hashlib.sha256(f"{broker_order_id}:{status.value}:{new_filled_qty:.8f}".encode()).hexdigest()
@@ -190,4 +190,4 @@ class DeterministicBrokerSimulator(BrokerAdapterPort):
         return self._orders_by_broker_id.get(broker_order_id)
 
     def get_deals(self, broker_order_id: str) -> List[BrokerDeal]:
-        return list(self._deals_by_broker_id.get(broker_order_id, []))
+        return self.fill_repository.get_deals_for_order(broker_order_id)
