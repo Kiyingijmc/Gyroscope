@@ -14,27 +14,40 @@ def test_provenance_recording_and_ancestry_tracing():
         artifact_type="OBSERVATION",
         timestamp_ns=1000,
         payload={"price": 100.0},
-        node_id="p1",
     )
 
     n2 = tracker.record(
         artifact_type="FEATURE",
         timestamp_ns=1005,
         payload={"sma": 99.5},
-        parent_node_ids=["p1"],
-        node_id="p2",
+        parent_node_ids=[n1.node_id],
     )
 
     n3 = tracker.record(
         artifact_type="RISK_DECISION",
         timestamp_ns=1010,
         payload={"approved": True},
-        parent_node_ids=["p2"],
-        node_id="p3",
+        parent_node_ids=[n2.node_id],
     )
 
-    ancestry = tracker.trace_ancestry("p3")
+    ancestry = tracker.trace_ancestry(n3.node_id)
     node_ids = [node.node_id for node in ancestry]
 
-    assert node_ids == ["p3", "p2", "p1"]
-    assert tracker.get_node("p2").parent_node_ids == ["p1"]
+    assert node_ids == [n3.node_id, n2.node_id, n1.node_id]
+    assert tracker.get_node(n2.node_id).parent_node_ids == (n1.node_id,)
+
+
+def test_provenance_payload_deep_immutability_and_aliasing():
+    """Verify caller-owned mutable payloads cannot mutate stored provenance nodes after creation."""
+    tracker = ProvenanceTracker("sha1", "cfg1", "1.0.0")
+
+    payload = {"nested": {"value": 1, "items": [10, 20]}}
+    node = tracker.record("OBS", 1000, payload)
+
+    # Mutate original caller-owned payload dictionary
+    payload["nested"]["value"] = 999
+    payload["nested"]["items"].append(30)
+
+    # Stored node payload must remain unchanged
+    assert node.payload["nested"]["value"] == 1
+    assert tuple(node.payload["nested"]["items"]) == (10, 20)
