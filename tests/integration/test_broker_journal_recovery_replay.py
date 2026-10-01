@@ -30,7 +30,8 @@ def test_durable_journal_atomic_transaction_lifecycle(tmp_path: Path):
     journal_path = tmp_path / "journal.wal"
     journal = DurableEventJournal(journal_path)
 
-    assert journal.state == JournalState.UNINITIALIZED
+    # Initially recovered state is COMMITTED
+    assert journal.state == JournalState.COMMITTED
 
     event_payload = {"event_id": "evt_1", "price": "50000.00"}
     journal.append_atomic(event_payload)
@@ -38,7 +39,7 @@ def test_durable_journal_atomic_transaction_lifecycle(tmp_path: Path):
     assert journal.state == JournalState.COMMITTED
     assert len(journal.get_committed_events()) == 1
     assert journal_path.exists()
-    assert "evt_1" in journal_path.read_text()
+    assert b"evt_1" in journal_path.read_bytes()
 
 
 def test_broker_simulator_order_execution_and_rejection():

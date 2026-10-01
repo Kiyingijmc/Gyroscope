@@ -12,6 +12,13 @@ AUTHORITATIVE_PATHS = [
     "gyroscope/provenance",
     "gyroscope/state",
     "gyroscope/config",
+    "gyroscope/adapters",
+    "gyroscope/contracts",
+    "gyroscope/risk",
+    "gyroscope/execution",
+    "gyroscope/persistence",
+    "gyroscope/broker",
+    "gyroscope/reconciliation",
 ]
 
 # Map of forbidden modules and their dangerous attributes

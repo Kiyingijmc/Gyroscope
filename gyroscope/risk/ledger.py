@@ -1,4 +1,4 @@
-"""Opportunity Risk Ledger evaluating candidate proposals against exact Decimal financial and risk boundaries."""
+"""Opportunity Risk Ledger evaluating candidate proposals against exact Decimal financial, directional exposure, and risk boundaries."""
 
 from decimal import Decimal
 import hashlib
@@ -8,6 +8,7 @@ from typing import Dict, Optional
 from gyroscope.contracts.ports import RiskAuthorityPort, StatePort
 from gyroscope.contracts.types import (
     CandidateDecision,
+    DecisionSide,
     RiskAuthorization,
     RiskDecisionType,
 )
@@ -16,7 +17,7 @@ from gyroscope.core.numeric import assert_exact_financial_quantity, to_authorita
 
 
 class OpportunityRiskLedger(RiskAuthorityPort):
-    """Exact financial risk authority adapted from FRACTAL-FLOW OpportunityRiskLedger."""
+    """Exact financial risk authority with directional BUY (+Q) / SELL (-Q) net position exposure accounting."""
 
     def __init__(
         self,
@@ -28,6 +29,9 @@ class OpportunityRiskLedger(RiskAuthorityPort):
         self.max_notional_value = assert_exact_financial_quantity(max_notional_value)
         self.max_slippage_bps = assert_exact_financial_quantity(max_slippage_bps)
         self._current_exposure: Dict[str, Decimal] = {}
+
+    def get_exposure(self, symbol: str) -> Decimal:
+        return self._current_exposure.get(symbol, Decimal("0.00000000"))
 
     def compute_ledger_state_hash(self) -> str:
         state_dict = {
@@ -44,11 +48,13 @@ class OpportunityRiskLedger(RiskAuthorityPort):
         candidate: CandidateDecision,
         state_projection: StatePort,
     ) -> RiskAuthorization:
-        """Evaluate a candidate proposal against exact risk boundaries."""
-        # Risk evaluation cannot manufacture direction or change strategy side
+        """Evaluate a candidate proposal against exact risk boundaries with directional exposure accounting."""
         symbol = candidate.symbol
-        curr_exp = self._current_exposure.get(symbol, Decimal("0.00000000"))
-        new_exp = curr_exp + candidate.target_quantity
+        curr_exp = self.get_exposure(symbol)
+
+        # Directional delta: BUY is +Q, SELL is -Q
+        delta_qty = candidate.target_quantity if candidate.side == DecisionSide.BUY else -candidate.target_quantity
+        new_exp = curr_exp + delta_qty
 
         price = candidate.limit_price or Decimal("1.00000000")
         notional = candidate.target_quantity * price
@@ -57,20 +63,24 @@ class OpportunityRiskLedger(RiskAuthorityPort):
         auth_bytes = f"{candidate.decision_id}:{eval_ns}:{self.compute_ledger_state_hash()}".encode("utf-8")
         auth_id = f"auth_{hashlib.sha256(auth_bytes).hexdigest()[:16]}"
 
-        if new_exp > self.max_position_limit:
-            # Reduce or reject
-            available_qty = self.max_position_limit - curr_exp
-            if available_qty > Decimal("0.00000000"):
+        if abs(new_exp) > self.max_position_limit:
+            # Calculate maximum allowable quantity in candidate direction
+            if candidate.side == DecisionSide.BUY:
+                allowed_qty = max(Decimal("0.00000000"), self.max_position_limit - curr_exp)
+            else:
+                allowed_qty = max(Decimal("0.00000000"), self.max_position_limit + curr_exp)
+
+            if allowed_qty > Decimal("0.00000000"):
                 return RiskAuthorization(
                     authorization_id=auth_id,
                     candidate_decision_id=candidate.decision_id,
                     decision_type=RiskDecisionType.REDUCE,
-                    approved_quantity=available_qty,
+                    approved_quantity=allowed_qty,
                     approved_limit_price=candidate.limit_price,
                     approved_stop_price=candidate.stop_price,
                     max_slippage_bps=self.max_slippage_bps,
-                    risk_budget_consumed=available_qty * price,
-                    reason=f"Quantity reduced from {candidate.target_quantity} to {available_qty} due to position limit",
+                    risk_budget_consumed=allowed_qty * price,
+                    reason=f"Directional quantity reduced from {candidate.target_quantity} to {allowed_qty} due to limit {self.max_position_limit}",
                     evaluated_at_ns=eval_ns,
                     risk_ledger_state_hash=self.compute_ledger_state_hash(),
                     provenance_node_id=candidate.provenance_node_id,
