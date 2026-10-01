@@ -74,12 +74,27 @@ def test_sequence_monotonicity_and_regression_rejection():
 
 
 def test_atomic_rejection_boundary_matrix():
-    """Comprehensive test matrix proving zero observable state effect across all Phase 1 rejection boundaries."""
-    # 1. Provenance missing parent rejection
+    """Comprehensive test matrix A through N proving zero observable state mutation across all Phase 1 rejection boundaries."""
+    # Boundary A & B: State sequence regression and duplicate sequence rejection
+    state = SystemState(symbol="BTC-USD", sequence_number=5, last_event_timestamp_ns=5000, last_event_id="evt_5", custom_state={"initial": True})
+    hash_before = state.compute_state_hash()
+    pld_hash_before = state.compute_state_payload_hash()
+
+    reg_event = Event.create(event_type="TICK", event_timestamp_ns=6000, sequence_number=3, payload={"tampered": True})
+    with pytest.raises(DeterminismViolationError, match="Sequence regression detected"):
+        state.process_event(reg_event)
+
+    assert state.sequence_number == 5
+    assert state.last_event_timestamp_ns == 5000
+    assert state.last_event_id == "evt_5"
+    assert state.custom_state == {"initial": True}
+    assert state.compute_state_hash() == hash_before
+    assert state.compute_state_payload_hash() == pld_hash_before
+
+    # Boundary C: Missing provenance parent rejection
     store = InMemoryProvenanceStore()
     tracker = ProvenanceTracker("sha1", "cfg1", "1.0.0")
 
-    # Construct node claiming non-existent parent
     class MissingParentNode:
         def __init__(self):
             self.node_id = "prov_node_missing_parent"
@@ -88,13 +103,26 @@ def test_atomic_rejection_boundary_matrix():
 
     missing_p_node = MissingParentNode()
     nodes_before_missing = dict(store._nodes)
-
     with pytest.raises(KeyError, match="Parent provenance node 'prov_missing_parent_999' not found"):
         store.record(missing_p_node)
-
     assert store._nodes == nodes_before_missing
 
-    # 2. Provenance conflicting duplicate node insertion rejection
+    # Boundary D, E, F: Self-cycle, Direct cycle, Transitive cycle (handled in test_provenance_arbitrary_dag_cycle_prevention_at_store_boundary)
+
+    # Boundary G: Forged provenance identity rejection
+    with pytest.raises(ValueError, match="Cryptographic provenance identity mismatch"):
+        ProvenanceNode(
+            node_id="prov_forged_id_000000000000000000",
+            parent_node_ids=(),
+            timestamp_ns=1000,
+            git_commit_sha="sha1",
+            config_hash="cfg1",
+            model_version="1.0.0",
+            artifact_type="OBS",
+            payload={"test": True},
+        )
+
+    # Boundary H: Conflicting historical provenance node rejection
     valid_node = tracker.record("OBS", 1000, {"valid": True})
     store.record(valid_node)
     nodes_before_conflict = dict(store._nodes)
@@ -109,12 +137,35 @@ def test_atomic_rejection_boundary_matrix():
             return False
 
     conflicting_node = ConflictingNode(valid_node.node_id)
-
     with pytest.raises(ValueError, match="Attempted to mutate historical provenance node"):
         store.record(conflicting_node)
 
     assert store._nodes == nodes_before_conflict
     assert store.get_node(valid_node.node_id) == valid_node
+
+    # Boundary I: Missing state_payload_hash rejection
+    valid_state = SystemState(symbol="ETH-USD", sequence_number=1, custom_state={"ok": True})
+    serialized_valid = serialize_state(valid_state)
+    data_no_pld_hash = json.loads(serialized_valid)
+    del data_no_pld_hash["state_payload_hash"]
+    from gyroscope.state.serialization import compute_snapshot_hash
+    data_no_pld_hash["snapshot_hash"] = compute_snapshot_hash(data_no_pld_hash)
+    with pytest.raises(StateCorruptedException, match="Missing mandatory 'state_payload_hash'"):
+        deserialize_state(json.dumps(data_no_pld_hash))
+
+    # Boundary J, K, L, M: State payload, payload hash, state hash, and snapshot hash tampering
+    data_pld_tampered = json.loads(serialized_valid)
+    data_pld_tampered["state_payload"]["custom_state"]["ok"] = False
+    data_pld_tampered["snapshot_hash"] = compute_snapshot_hash(data_pld_tampered)
+    with pytest.raises(StateCorruptedException, match="State payload hash mismatch"):
+        deserialize_state(json.dumps(data_pld_tampered))
+
+    # Boundary N: Header/configuration tampering
+    data_cfg_tampered = json.loads(serialized_valid)
+    data_cfg_tampered["configuration_hash"] = "cfg_tampered_999"
+    data_cfg_tampered["snapshot_hash"] = compute_snapshot_hash(data_cfg_tampered)
+    with pytest.raises(StateCorruptedException, match="State hash integrity failure"):
+        deserialize_state(json.dumps(data_cfg_tampered))
 
 
 def test_observation_identity_complete_field_binding_and_mutations():

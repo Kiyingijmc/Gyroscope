@@ -139,24 +139,16 @@ def test_provenance_documentation_agrees_with_git():
     # Helper to validate synthetic PR merge refs strictly
     is_synthetic_pr_merge_ref = is_synthetic_pr_merge_reference(git_branch)
 
-    # C. Verification branch must match actual Git branch family or exact branch
+    # C. Verification branch must match actual Git branch exact identity or synthetic PR reference
     is_valid_manifest_branch = (
         f"verification_branch: {git_branch}" in manifest_text
         or f'verification_branch: "{git_branch}"' in manifest_text
-        or (
-            ("phase-1-forensic-closure-freeze" in git_branch or "phase-1-forensic-closure-remediation" in git_branch)
-            and ("verification_branch: phase-1-forensic-closure" in manifest_text or "verification_branch: \"phase-1-forensic-closure" in manifest_text)
-        )
         or is_synthetic_pr_merge_ref
     )
     assert is_valid_manifest_branch, f"Manifest verification_branch does not match Git branch: {git_branch}"
 
     is_valid_baseline_branch = (
         f"- **Verification Branch:** `{git_branch}`" in baseline_text
-        or (
-            ("phase-1-forensic-closure-freeze" in git_branch or "phase-1-forensic-closure-remediation" in git_branch)
-            and "- **Verification Branch:** `phase-1-forensic-closure" in baseline_text
-        )
         or is_synthetic_pr_merge_ref
     )
     assert is_valid_baseline_branch, f"Baseline Verification Branch does not match Git branch: {git_branch}"

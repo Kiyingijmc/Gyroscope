@@ -38,16 +38,31 @@ def test_provenance_recording_and_ancestry_tracing():
 
 
 def test_provenance_payload_deep_immutability_and_aliasing():
-    """Verify caller-owned mutable payloads cannot mutate stored provenance nodes after creation."""
+    """Verify caller-owned mutable payloads with dicts, lists, nested dicts, and nested lists cannot mutate stored provenance nodes, hashes, or ancestry after creation."""
     tracker = ProvenanceTracker("sha1", "cfg1", "1.0.0")
 
-    payload = {"nested": {"value": 1, "items": [10, 20]}}
+    payload = {
+        "dict": {"a": 1},
+        "list": [10, 20],
+        "nested_dict": {"level1": {"level2": "original"}},
+        "nested_list": [[1, 2], [{"deep": "data"}]],
+    }
+    initial_payload_hash = tracker.record("OBS", 1000, payload).payload_hash
     node = tracker.record("OBS", 1000, payload)
+    initial_node_id = node.node_id
 
-    # Mutate original caller-owned payload dictionary
-    payload["nested"]["value"] = 999
-    payload["nested"]["items"].append(30)
+    # Mutate caller-owned payload structures at all levels
+    payload["dict"]["a"] = 999
+    payload["list"].append(30)
+    payload["nested_dict"]["level1"]["level2"] = "tampered"
+    payload["nested_list"][0].append(3)
+    payload["nested_list"][1][0]["deep"] = "hacked"
 
-    # Stored node payload must remain unchanged
-    assert node.payload["nested"]["value"] == 1
-    assert tuple(node.payload["nested"]["items"]) == (10, 20)
+    # Stored node payload, payload_hash, and node_id must remain strictly unchanged
+    assert node.node_id == initial_node_id
+    assert node.payload_hash == initial_payload_hash
+    assert node.payload["dict"]["a"] == 1
+    assert tuple(node.payload["list"]) == (10, 20)
+    assert node.payload["nested_dict"]["level1"]["level2"] == "original"
+    assert node.payload["nested_list"][0] == (1, 2)
+    assert node.payload["nested_list"][1][0]["deep"] == "data"
