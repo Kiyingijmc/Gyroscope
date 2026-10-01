@@ -21,22 +21,30 @@ The Gyroscope Phase-1 deterministic kernel has satisfied all required proof-qual
 
 ```yaml
 repository: Kiyingijmc/Gyroscope
-final_branch: phase-1-forensic-closure-final-evidence-20261001
-starting_HEAD: 50f95ef45871d5232d5c1e37678069ff80cd6b51
+canonical_evidence_branch_prefix: phase-1-forensic-closure-final-evidence-20261001
+exact_git_evidence_branch: phase-1-forensic-closure-final-evidence-20261001-54644036951372312
+reconciliation_branch: phase-1-forensic-closure-evidence-reconciliation-20261001
+starting_HEAD: c22f768bae7dcd24b8cf2c1f31f9d46855408611
 final_HEAD: DYNAMIC_GIT_HEAD (resolved post-commit)
-final_parent: 50f95ef45871d5232d5c1e37678069ff80cd6b51
+final_parent: c22f768bae7dcd24b8cf2c1f31f9d46855408611
 base_SHA: 1189f9a31fc1d80a91a67cc92ffa0fa9c968f0ce
-PR_number: 4
+PR_number: 5
+synthetic_pr_merge_ref: refs/pull/5/merge
+synthetic_pr_merge_sha: a620415f669862cc40c939347423f3b6f72d9857
 historical_v1_closure_sha: 0f8c01a4004ed34a27660d964d34bb47adea2bc3
 foundation_root_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
+ci_run_id: 36835269106
+ci_run_number: 37
+ci_status: success
 ```
 
 ### Git Topology Relationship
 - **Foundation Root (`foundation_root_sha`):** `3a9254445849d26544ae6aa5c03a5e767fd3586b` (`git rev-list --max-parents=0 HEAD`).
 - **PR Base (`base_SHA`):** `1189f9a31fc1d80a91a67cc92ffa0fa9c968f0ce` (Merge pull request #1).
-- **Previous Branch Tip (`starting_HEAD`):** `50f95ef45871d5232d5c1e37678069ff80cd6b51` (Parent of final evidence closure commit).
-- **Final Branch Tip (`final_HEAD`):** Tip of branch `phase-1-forensic-closure-final-evidence-20261001`.
-- **CI Checked-Out SHA / Synthetic PR Merge SHA:** When GitHub Actions runs on PR #4 triggers, GitHub checks out synthetic merge ref `refs/pull/4/merge`.
+- **PR Source HEAD (`starting_HEAD`):** `c22f768bae7dcd24b8cf2c1f31f9d46855408611` (Final evidence commit on PR #5).
+- **Canonical Evidence Branch Prefix:** `phase-1-forensic-closure-final-evidence-20261001` (Standard prefix for Phase 1 final evidence).
+- **Exact Git Evidence Branch:** `phase-1-forensic-closure-final-evidence-20261001-54644036951372312` (Actual Git branch pushed for PR #5).
+- **Synthetic PR Merge Ref / SHA:** `refs/pull/5/merge` / `a620415f669862cc40c939347423f3b6f72d9857` (GitHub Actions runner checkout representing synthetic merge of `c22f768...` into base `1189f9a...`).
 
 ---
 
@@ -116,14 +124,14 @@ All 14 rejection boundaries are verified with complete pre-operation and post-op
 | **D** | Provenance self-cycle (`prov_self` -> `prov_self`) | `REJECTED_BEFORE_STORE_MUTATION` | `_canonical_provenance_store_bytes(store)` pre == post | PASSED |
 | **E** | Direct provenance cycle (A -> B -> A) | `REJECTED_BEFORE_STORE_MUTATION` | `_canonical_provenance_store_bytes(store)` pre == post | PASSED |
 | **F** | Transitive provenance cycle (A -> B -> C -> D -> A) | `REJECTED_BEFORE_STORE_MUTATION` | `_canonical_provenance_store_bytes(store)` pre == post | PASSED |
-| **G** | Forged provenance node identity | `REJECTED_BEFORE_STATE_CONSTRUCTION` | Exception thrown prior to node instantiation | PASSED |
+| **G** | Forged provenance node identity | `REJECTED_BEFORE_CONSTRUCTION` | Exception thrown prior to node instantiation | PASSED |
 | **H** | Conflicting historical provenance node mutation | `REJECTED_BEFORE_STORE_MUTATION` | `_canonical_provenance_store_bytes(store)` pre == post | PASSED |
-| **I** | Missing `state_payload_hash` header | `REJECTED_BEFORE_STATE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
-| **J** | State payload tampering | `REJECTED_BEFORE_STATE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
-| **K** | Payload hash (`H1`) corruption | `REJECTED_BEFORE_STATE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
-| **L** | State hash (`H2`) corruption | `REJECTED_BEFORE_STATE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
-| **M** | Snapshot hash (`H3`) corruption | `REJECTED_BEFORE_STATE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
-| **N** | Configuration header tampering | `REJECTED_BEFORE_STATE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
+| **I** | Missing `state_payload_hash` header | `REJECTED_BEFORE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
+| **J** | State payload tampering | `REJECTED_BEFORE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
+| **K** | Payload hash (`H1`) corruption | `REJECTED_BEFORE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
+| **L** | State hash (`H2`) corruption | `REJECTED_BEFORE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
+| **M** | Snapshot hash (`H3`) corruption | `REJECTED_BEFORE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
+| **N** | Configuration header tampering | `REJECTED_BEFORE_CONSTRUCTION` | `StateCorruptedException` before state construct | PASSED |
 
 ---
 
