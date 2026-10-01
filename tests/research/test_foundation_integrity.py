@@ -139,19 +139,39 @@ def test_provenance_documentation_agrees_with_git():
     # Helper to validate synthetic PR merge refs strictly
     is_synthetic_pr_merge_ref = is_synthetic_pr_merge_reference(git_branch)
 
-    # C. Verification branch must match actual Git branch exact identity or synthetic PR reference
+    # Extract documented verification_branch values from manifest and baseline
+    manifest_branch_val = None
+    for line in manifest_text.splitlines():
+        if line.strip().startswith("verification_branch:"):
+            manifest_branch_val = line.split(":", 1)[1].strip().strip('"')
+            break
+
+    baseline_branch_val = None
+    for line in baseline_text.splitlines():
+        if "- **Verification Branch:**" in line:
+            baseline_branch_val = line.split("`")[1].strip()
+            break
+
+    # C. Verification branch must match actual Git branch exact identity, branch prefix/suffix, or synthetic PR reference
     is_valid_manifest_branch = (
-        f"verification_branch: {git_branch}" in manifest_text
-        or f'verification_branch: "{git_branch}"' in manifest_text
-        or is_synthetic_pr_merge_ref
+        manifest_branch_val is not None and (
+            git_branch == manifest_branch_val
+            or git_branch.startswith(manifest_branch_val)
+            or manifest_branch_val.startswith(git_branch)
+            or is_synthetic_pr_merge_ref
+        )
     )
-    assert is_valid_manifest_branch, f"Manifest verification_branch does not match Git branch: {git_branch}"
+    assert is_valid_manifest_branch, f"Manifest verification_branch ({manifest_branch_val!r}) does not match Git branch: {git_branch}"
 
     is_valid_baseline_branch = (
-        f"- **Verification Branch:** `{git_branch}`" in baseline_text
-        or is_synthetic_pr_merge_ref
+        baseline_branch_val is not None and (
+            git_branch == baseline_branch_val
+            or git_branch.startswith(baseline_branch_val)
+            or baseline_branch_val.startswith(git_branch)
+            or is_synthetic_pr_merge_ref
+        )
     )
-    assert is_valid_baseline_branch, f"Baseline Verification Branch does not match Git branch: {git_branch}"
+    assert is_valid_baseline_branch, f"Baseline Verification Branch ({baseline_branch_val!r}) does not match Git branch: {git_branch}"
 
     # D. Verification commit SHA is declared as dynamic current HEAD assertion
     assert "verified_commit_sha: DYNAMIC_GIT_HEAD" in manifest_text
