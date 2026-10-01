@@ -1,11 +1,13 @@
 """Reconciliation authority and recovery engine gating production execution."""
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 import hashlib
 from typing import Dict, List, Optional, Tuple
 
 from gyroscope.contracts.ports import ReconciliationPort, RecoveryPort
 from gyroscope.contracts.types import (
+    BrokerDeal,
     BrokerOrderRecord,
     ExecutionIntent,
     OrderStatus,
@@ -24,17 +26,18 @@ class BrokerQueryObservation:
     is_fresh: bool
     query_quality_score: float
     order_records: Tuple[BrokerOrderRecord, ...]
+    deal_records: Tuple[BrokerDeal, ...] = ()
 
 
 class ReconciliationEngine(ReconciliationPort):
-    """Reconciliation authority verifying broker state against active execution intents."""
+    """Reconciliation authority verifying broker order and deal state against active execution intents."""
 
     def reconcile_broker_query(
         self,
         active_intents: List[ExecutionIntent],
         query_obs: BrokerQueryObservation,
     ) -> ReconciliationEvidence:
-        """Process explicit broker query observation and produce ReconciliationEvidence."""
+        """Process explicit broker query observation and produce ReconciliationEvidence covering orders and fill-level deals."""
         matched_count = 0
         open_count = 0
         orphan_count = 0
@@ -43,6 +46,7 @@ class ReconciliationEngine(ReconciliationPort):
         known_intents = {intent.intent_id: intent for intent in active_intents}
         reconciled_ids = []
 
+        # 1. Order-level reconciliation
         for record in query_obs.order_records:
             if record.intent_id in known_intents:
                 matched_count += 1
@@ -59,6 +63,21 @@ class ReconciliationEngine(ReconciliationPort):
                     mismatch_detected = True
             else:
                 orphan_count += 1
+
+        # 2. Deal-level fill-ledger reconciliation
+        if query_obs.deal_records:
+            deals_by_intent: Dict[str, List[BrokerDeal]] = {}
+            for deal in query_obs.deal_records:
+                if deal.intent_id not in known_intents:
+                    orphan_count += 1
+                else:
+                    deals_by_intent.setdefault(deal.intent_id, []).append(deal)
+
+            for intent_id, deals in deals_by_intent.items():
+                intent = known_intents[intent_id]
+                total_fill_qty = sum((d.fill_quantity for d in deals), Decimal("0.00000000"))
+                if total_fill_qty > intent.quantity:
+                    mismatch_detected = True  # Overfill detected!
 
         rec_bytes = f"{query_obs.query_id}:{matched_count}:{open_count}:{orphan_count}:{mismatch_detected}:{query_obs.is_fresh}".encode("utf-8")
         rec_id = f"rec_{hashlib.sha256(rec_bytes).hexdigest()[:16]}"

@@ -1,9 +1,9 @@
-"""Opportunity Risk Ledger evaluating candidate proposals against exact Decimal financial, directional exposure, and risk boundaries."""
+"""Opportunity Risk Ledger evaluating candidate proposals against exact Decimal financial, directional exposure, and risk boundaries with WAL event replay reconstruction."""
 
 from decimal import Decimal
 import hashlib
 import json
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from gyroscope.contracts.ports import RiskAuthorityPort, StatePort
 from gyroscope.contracts.types import (
@@ -17,7 +17,7 @@ from gyroscope.core.numeric import assert_exact_financial_quantity, to_authorita
 
 
 class OpportunityRiskLedger(RiskAuthorityPort):
-    """Exact financial risk authority with directional BUY (+Q) / SELL (-Q) net position exposure accounting."""
+    """Exact financial risk authority with directional BUY (+Q) / SELL (-Q) net position exposure accounting and WAL event reconstruction."""
 
     def __init__(
         self,
@@ -43,6 +43,23 @@ class OpportunityRiskLedger(RiskAuthorityPort):
         canonical_json = json.dumps(state_dict, sort_keys=True, separators=(",", ":"))
         return f"rsk_{hashlib.sha256(canonical_json.encode('utf-8')).hexdigest()[:32]}"
 
+    def apply_risk_event(self, event_dict: Dict[str, Union[str, float]]) -> None:
+        """Deterministically apply/reconstruct a risk event record."""
+        event_type = event_dict.get("event_type")
+        if event_type == "RISK_AUTHORIZATION_GRANTED":
+            symbol = str(event_dict["symbol"])
+            side = str(event_dict["side"])
+            qty = to_authoritative_decimal(event_dict["approved_quantity"])
+            delta_qty = qty if side == DecisionSide.BUY.value else -qty
+            curr_exp = self.get_exposure(symbol)
+            self._current_exposure[symbol] = curr_exp + delta_qty
+
+    def reconstruct_from_events(self, events: List[Dict[str, Any]]) -> None:
+        """Reconstruct risk exposure state deterministically from an authoritative event sequence."""
+        self._current_exposure.clear()
+        for evt in events:
+            self.apply_risk_event(evt)
+
     def evaluate_candidate_decision(
         self,
         candidate: CandidateDecision,
@@ -52,7 +69,6 @@ class OpportunityRiskLedger(RiskAuthorityPort):
         symbol = candidate.symbol
         curr_exp = self.get_exposure(symbol)
 
-        # Directional delta: BUY is +Q, SELL is -Q
         delta_qty = candidate.target_quantity if candidate.side == DecisionSide.BUY else -candidate.target_quantity
         new_exp = curr_exp + delta_qty
 
@@ -64,7 +80,6 @@ class OpportunityRiskLedger(RiskAuthorityPort):
         auth_id = f"auth_{hashlib.sha256(auth_bytes).hexdigest()[:16]}"
 
         if abs(new_exp) > self.max_position_limit:
-            # Calculate maximum allowable quantity in candidate direction
             if candidate.side == DecisionSide.BUY:
                 allowed_qty = max(Decimal("0.00000000"), self.max_position_limit - curr_exp)
             else:
@@ -117,7 +132,7 @@ class OpportunityRiskLedger(RiskAuthorityPort):
                 provenance_node_id=candidate.provenance_node_id,
             )
 
-        # Accept
+        # Accept & apply exposure update
         self._current_exposure[symbol] = new_exp
         return RiskAuthorization(
             authorization_id=auth_id,

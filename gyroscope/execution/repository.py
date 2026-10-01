@@ -122,32 +122,44 @@ class SQLiteIntentRepository(IntentRepositoryPort):
                 )
             return  # Idempotent duplicate suppression
 
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO execution_intents (
-                    intent_id, idempotency_key, request_fingerprint, authorization_id,
-                    symbol, side, order_type, quantity, limit_price, stop_price,
-                    configuration_hash, lineage_node_id, created_at_ns
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    intent.intent_id,
-                    intent.idempotency_key,
-                    intent.request_fingerprint,
-                    intent.authorization_id,
-                    intent.symbol,
-                    intent.side.value,
-                    intent.order_type.value,
-                    f"{intent.quantity:.8f}",
-                    f"{intent.limit_price:.8f}" if intent.limit_price is not None else None,
-                    f"{intent.stop_price:.8f}" if intent.stop_price is not None else None,
-                    intent.configuration_hash,
-                    intent.lineage_node_id,
-                    intent.created_at_ns,
-                ),
-            )
-            conn.commit()
+        try:
+            with self._get_connection() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO execution_intents (
+                        intent_id, idempotency_key, request_fingerprint, authorization_id,
+                        symbol, side, order_type, quantity, limit_price, stop_price,
+                        configuration_hash, lineage_node_id, created_at_ns
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        intent.intent_id,
+                        intent.idempotency_key,
+                        intent.request_fingerprint,
+                        intent.authorization_id,
+                        intent.symbol,
+                        intent.side.value,
+                        intent.order_type.value,
+                        f"{intent.quantity:.8f}",
+                        f"{intent.limit_price:.8f}" if intent.limit_price is not None else None,
+                        f"{intent.stop_price:.8f}" if intent.stop_price is not None else None,
+                        intent.configuration_hash,
+                        intent.lineage_node_id,
+                        intent.created_at_ns,
+                    ),
+                )
+                conn.commit()
+        except sqlite3.IntegrityError:
+            # Concurrent race check
+            existing_after_race = self.get_by_idempotency_key(intent.idempotency_key)
+            if existing_after_race:
+                if existing_after_race.request_fingerprint != intent.request_fingerprint:
+                    raise ValueError(
+                        f"Conflicting intent under same idempotency key '{intent.idempotency_key}': "
+                        f"existing fingerprint {existing_after_race.request_fingerprint} != new fingerprint {intent.request_fingerprint}"
+                    )
+                return  # Idempotent duplicate suppression
+            raise
 
     def _row_to_intent(self, row: sqlite3.Row) -> ExecutionIntent:
         qty = to_authoritative_decimal(row["quantity"])

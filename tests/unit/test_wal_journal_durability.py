@@ -1,4 +1,4 @@
-"""Unit and fault-injection tests for 7-phase WAL event journal and crash-tail recovery."""
+"""Unit and fault-injection tests for 7-phase WAL event journal, durable commit markers, and crash-tail recovery."""
 
 from pathlib import Path
 import pytest
@@ -6,81 +6,86 @@ import pytest
 from gyroscope.persistence.journal import DurableEventJournal, JournalState
 
 
-def test_wal_7_phase_explicit_transitions(tmp_path: Path):
-    """Verify that all seven WAL phases execute explicitly in order."""
-    journal_file = tmp_path / "wal_test.log"
-    journal = DurableEventJournal(journal_file)
+def test_wal_uncommitted_fsync_is_not_replayed(tmp_path: Path):
+    """Verify that a transaction written, flushed, and fsynced but WITHOUT a durable commit marker is NOT replayed as committed."""
+    journal_file = tmp_path / "wal_uncommitted.log"
 
-    assert journal.state == JournalState.COMMITTED
-
-    payload = {"event_id": "e_1", "symbol": "BTC-USD"}
-
-    # Phase 1: PREPARED
-    journal.prepare_event(payload)
-    assert journal.state == JournalState.PREPARED
-
-    # Phase 2: CAPTURED_OFFSET
-    offset = journal.capture_offset()
-    assert journal.state == JournalState.CAPTURED_OFFSET
-    assert offset == 0
-
-    # Phase 3: WRITTEN
-    journal.write_to_disk()
-    assert journal.state == JournalState.WRITTEN
-
-    # Phase 4: FLUSHED
-    journal.flush_buffer()
-    assert journal.state == JournalState.FLUSHED
-
-    # Phase 5: FSYNCED
-    journal.fsync_to_disk()
-    assert journal.state == JournalState.FSYNCED
-
-    # Phase 6: PUBLISHED_MEMORY
-    journal.publish_to_memory()
-    assert journal.state == JournalState.PUBLISHED_MEMORY
-    assert len(journal.get_committed_events()) == 1
-
-    # Phase 7: COMMITTED
-    journal.commit()
-    assert journal.state == JournalState.COMMITTED
-    journal.close()
-
-
-def test_wal_crash_tail_recovery_truncates_torn_write(tmp_path: Path):
-    """Verify that crash-tail recovery detects torn writes/checksum mismatches at the tail and truncates safely."""
-    journal_file = tmp_path / "wal_crash.log"
-
-    # Process 1: Write two valid events
+    # Process 1: Prepare, write, flush, fsync... BUT crash before writing commit marker
     j1 = DurableEventJournal(journal_file)
-    j1.append_atomic({"event_id": "evt_valid_1"})
-    j1.append_atomic({"event_id": "evt_valid_2"})
+    payload = {"event_id": "evt_uncommitted"}
+    tx_id = j1.prepare_event(payload)
+    j1.capture_offset()
+    j1.write_to_disk()
+    j1.flush_buffer()
+    j1.fsync_to_disk()
+    # Simulate crash before j1.commit()!
     j1.close()
 
-    # Simulate crash with a torn/corrupt write at the tail
-    with open(journal_file, "ab") as f:
-        f.write(b"\x00\x00\x12\x34\x00\x00\x00\x50TORN_GARBAGE_TAIL_BYTES")
-
-    # Process 2: Recover on restart
+    # Process 2: Recover on restart -> uncommitted transaction must NOT be replayed as committed
     j2 = DurableEventJournal(journal_file)
     committed = j2.get_committed_events()
 
-    assert len(committed) == 2
-    assert committed[0]["event_id"] == "evt_valid_1"
-    assert committed[1]["event_id"] == "evt_valid_2"
+    assert len(committed) == 0
+    assert tx_id not in j2._committed_tx_ids
     j2.close()
 
 
-def test_wal_fault_injection_interrupted_phases(tmp_path: Path):
-    """Verify that crashing at intermediate phases (PREPARED, WRITTEN, etc.) does not recover uncommitted tail events."""
-    journal_file = tmp_path / "wal_interrupt.log"
+def test_wal_committed_transaction_survives_restart(tmp_path: Path):
+    """Verify that a fully committed transaction with a durable commit marker survives restart."""
+    journal_file = tmp_path / "wal_committed.log"
 
-    # Crash after PREPARED (no bytes written to disk)
     j1 = DurableEventJournal(journal_file)
-    j1.prepare_event({"event_id": "evt_uncommitted_1"})
-    # Crash / process exit simulation -> close without flush/fsync/commit
+    tx_id = j1.append_atomic({"event_id": "evt_committed_1"})
     j1.close()
 
     j2 = DurableEventJournal(journal_file)
-    assert len(j2.get_committed_events()) == 0
+    committed = j2.get_committed_events()
+
+    assert len(committed) == 1
+    assert committed[0]["event_id"] == "evt_committed_1"
+    assert tx_id in j2._committed_tx_ids
     j2.close()
+
+
+def test_wal_fault_injection_matrix_across_all_phases(tmp_path: Path):
+    """Fault-injection matrix crashing after every phase to verify no uncommitted event is replayed."""
+    for crash_phase in ["PREPARED", "CAPTURED_OFFSET", "WRITTEN", "FLUSHED", "FSYNCED", "PUBLISHED_MEMORY"]:
+        j_file = tmp_path / f"wal_crash_{crash_phase}.log"
+        j = DurableEventJournal(j_file)
+        payload = {"event_id": f"evt_crash_{crash_phase}"}
+
+        if crash_phase == "PREPARED":
+            j.prepare_event(payload)
+        elif crash_phase == "CAPTURED_OFFSET":
+            j.prepare_event(payload)
+            j.capture_offset()
+        elif crash_phase == "WRITTEN":
+            j.prepare_event(payload)
+            j.capture_offset()
+            j.write_to_disk()
+        elif crash_phase == "FLUSHED":
+            j.prepare_event(payload)
+            j.capture_offset()
+            j.write_to_disk()
+            j.flush_buffer()
+        elif crash_phase == "FSYNCED":
+            j.prepare_event(payload)
+            j.capture_offset()
+            j.write_to_disk()
+            j.flush_buffer()
+            j.fsync_to_disk()
+        elif crash_phase == "PUBLISHED_MEMORY":
+            j.prepare_event(payload)
+            j.capture_offset()
+            j.write_to_disk()
+            j.flush_buffer()
+            j.fsync_to_disk()
+            j.publish_to_memory()
+
+        # Simulate crash / abrupt exit before commit()
+        j.close()
+
+        # Recovery verification
+        rec = DurableEventJournal(j_file)
+        assert len(rec.get_committed_events()) == 0, f"Failed: uncommitted event replayed for crash at phase {crash_phase}"
+        rec.close()

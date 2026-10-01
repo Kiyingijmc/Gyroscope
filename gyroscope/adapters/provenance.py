@@ -22,7 +22,7 @@ AUTHORITY_PRECEDENCE = {
 
 
 class ProvenanceBridge(ProvenancePort):
-    """Bridge adapter mapping domain events and decisions into Gyroscope's single authoritative provenance DAG with strict causal ancestry validation."""
+    """Bridge adapter mapping domain events and decisions into Gyroscope's single authoritative provenance DAG with strict causal ancestry and precedence validation."""
 
     def __init__(self, tracker: ProvenanceTracker) -> None:
         self._tracker = tracker
@@ -38,15 +38,28 @@ class ProvenanceBridge(ProvenancePort):
         parent_node_ids: Tuple[str, ...],
         timestamp_ns: int = 1000,
     ) -> str:
-        """Record a domain event node into the single authoritative provenance graph and enforce causal parent link existence."""
-        # Enforce that non-OBSERVATION nodes MUST carry parent node references
+        """Record a domain event node into the single authoritative provenance graph, enforcing monotonic authority ordering and parent existence."""
+        child_level = AUTHORITY_PRECEDENCE[authority]
+
         if authority != AuthorityDomain.OBSERVATION and not parent_node_ids:
             raise ValueError(f"Non-observation authority domain {authority.value} must carry parent node references")
 
-        # Enforce parent node existence in the tracker
         for parent_id in parent_node_ids:
-            if not self._tracker.get_node(parent_id):
+            parent_node = self._tracker.get_node(parent_id)
+            if not parent_node:
                 raise ValueError(f"Missing required parent provenance node in DAG: '{parent_id}'")
+
+            try:
+                parent_auth = AuthorityDomain(parent_node.artifact_type)
+                parent_level = AUTHORITY_PRECEDENCE[parent_auth]
+            except ValueError:
+                parent_auth = None
+
+            if parent_auth is not None and parent_level > child_level:
+                raise ValueError(
+                    f"Backward authority transition rejected: parent {parent_auth.value} (level {parent_level}) "
+                    f"cannot precede child {authority.value} (level {child_level})"
+                )
 
         node = self._tracker.record(
             artifact_type=authority.value,
@@ -65,7 +78,25 @@ class ProvenanceBridge(ProvenancePort):
         node_id: str,
         required_authorities: Sequence[AuthorityDomain],
     ) -> bool:
-        """Verify that a node's causal ancestry contains nodes from all required authority domains."""
+        """Verify that a node's causal ancestry contains nodes from all required authority domains in monotonic causal order."""
         ancestry = self.get_ancestry(node_id)
         found_authorities = {node.artifact_type for node in ancestry}
-        return all(req.value in found_authorities for req in required_authorities)
+        if not all(req.value in found_authorities for req in required_authorities):
+            return False
+
+        # Verify ordering along every parent-child edge in ancestry
+        for node in ancestry:
+            try:
+                node_auth = AuthorityDomain(node.artifact_type)
+                node_level = AUTHORITY_PRECEDENCE[node_auth]
+                for p_id in node.parent_node_ids:
+                    p_node = self._tracker.get_node(p_id)
+                    if p_node:
+                        p_auth = AuthorityDomain(p_node.artifact_type)
+                        p_level = AUTHORITY_PRECEDENCE[p_auth]
+                        if p_level > node_level:
+                            return False
+            except ValueError:
+                pass
+
+        return True
