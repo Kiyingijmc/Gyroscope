@@ -146,11 +146,58 @@ def test_observation_identity_complete_field_binding_and_mutations():
         ("source_version", "1.2.0"),
     ]
 
-    for field_name, new_val in mutations:
+    all_identity_fields = [
+        "source",
+        "symbol",
+        "timeframe",
+        "event_timestamp_ns",
+        "arrival_timestamp_ns",
+        "processing_timestamp_ns",
+        "sequence_number",
+        "price",
+        "bid",
+        "ask",
+        "volume",
+        "data_quality",
+        "session_state",
+        "news_state",
+        "decision_timestamp_ns",
+        "source_version",
+        "metadata",
+        "parent_observation_id",
+    ]
+
+    all_mutations = [
+        ("source", "KRAKEN"),
+        ("symbol", "ETH-USD"),
+        ("timeframe", "5m"),
+        ("event_timestamp_ns", 1001),
+        ("arrival_timestamp_ns", 1051),
+        ("processing_timestamp_ns", 1105),
+        ("sequence_number", 2),
+        ("price", 50001.0),
+        ("bid", 49998.0),
+        ("ask", 50002.0),
+        ("volume", 2.0),
+        ("data_quality", 0.95),
+        ("session_state", "EXTENDED"),
+        ("news_state", "NONE"),
+        ("decision_timestamp_ns", 1125),
+        ("source_version", "1.2.0"),
+        ("metadata", {"feed": "secondary"}),
+        ("parent_observation_id", "obs_parent_002"),
+    ]
+
+    tested_fields = set()
+    for field_name, new_val in all_mutations:
+        tested_fields.add(field_name)
         mutated_params = base_params.copy()
         mutated_params[field_name] = new_val
         mutated_id = compute_deterministic_observation_id(**mutated_params)
         assert mutated_id != base_id, f"Mutation of field '{field_name}' did not alter observation ID."
+
+    # Verify every identity field was explicitly mutation tested
+    assert tested_fields == set(all_identity_fields), f"Missing mutation coverage for identity fields: {set(all_identity_fields) - tested_fields}"
 
 
 def test_provenance_cryptographic_content_binding_and_rejections():
@@ -174,7 +221,7 @@ def test_provenance_cryptographic_content_binding_and_rejections():
 
 
 def test_provenance_arbitrary_dag_cycle_prevention_at_store_boundary():
-    """InMemoryProvenanceStore.record() boundary detects and rejects arbitrary cycles (A -> B -> C -> D -> A)."""
+    """InMemoryProvenanceStore.record() boundary detects and rejects arbitrary cycles (A -> B -> C -> D -> A) atomically."""
     store = InMemoryProvenanceStore()
     tracker = ProvenanceTracker("sha1", "cfg1", "1.0.0")
 
@@ -191,49 +238,41 @@ def test_provenance_arbitrary_dag_cycle_prevention_at_store_boundary():
     nD = tracker.record("STATE", 1300, {"step": "D"}, parent_node_ids=[nC.node_id])
     store.record(nD)
 
-    # Attempt to insert a new cryptographically valid node X that has parent D, but then try to insert a valid node Y with parent X and node ID A (which would create cycle)
-    # 1. Self-cycle through store.record(): Construct a node whose canonical parents include its own computed node_id
-    pld_self = {"step": "self_cycle"}
-    # First find fixed-point self-referential node ID where parent_node_ids=[node_id]
-    # compute_deterministic_provenance_id incorporates parent_node_ids
-    # We pass parent_node_ids=['placeholder'], compute ID, then construct node with parent=['placeholder']
-    computed_self_id = compute_deterministic_provenance_id(
-        artifact_type="STATE",
-        timestamp_ns=2000,
-        git_commit_sha="sha1",
-        config_hash="cfg1",
-        model_version="1.0.0",
-        parent_node_ids=["prov_self"],
-        payload=pld_self,
-    )
-    self_node = ProvenanceNode(
-        node_id=computed_self_id,
-        parent_node_ids=["prov_self"],
-        timestamp_ns=2000,
-        git_commit_sha="sha1",
-        config_hash="cfg1",
-        model_version="1.0.0",
-        artifact_type="STATE",
-        payload=pld_self,
-    )
-    # Now simulate a node whose ID equals one of its parents when attempting self-insertion check
-    assert store._would_create_cycle(self_node.node_id, [self_node.node_id]) is True
+    # 1. Public store boundary self-cycle rejection
+    # Test-only adversarial object compatible with ProvenanceNode interface
+    class TestAdversarialSelfNode:
+        def __init__(self, nid: str):
+            self.node_id = nid
+            self.parent_node_ids = (nid,)
+            self.payload = {"step": "self"}
 
-    # 2. Multi-step transitive cycle through store.record():
-    # Construct a new valid node E claiming parent D
-    nE = tracker.record("STATE", 1400, {"step": "E"}, parent_node_ids=[nD.node_id])
-    store.record(nE)
+    adv_self = TestAdversarialSelfNode("prov_self_node")
+    nodes_before_self = dict(store._nodes)
 
-    # Verify store contents before failed cycle insertion
-    nodes_before = set(store._nodes.keys())
+    with pytest.raises(ValueError, match="Self-referential provenance parent prohibited"):
+        store.record(adv_self)
 
-    # Direct helper cycle check proves store._would_create_cycle identifies A as ancestor of E
-    assert store._would_create_cycle(nA.node_id, [nE.node_id]) is True
-    assert store._would_create_cycle(nB.node_id, [nE.node_id]) is True
+    # Assert store state remains completely unchanged after rejection
+    assert store._nodes == nodes_before_self
 
-    # Store state remains identical before and after rejection
-    nodes_after = set(store._nodes.keys())
-    assert nodes_before == nodes_after
+    # 2. Public store boundary multi-step cycle rejection (A -> B -> C -> D -> A)
+    # Test-only adversarial object claiming nD as parent while having node_id = nA.node_id
+    class TestAdversarialCycleNode:
+        def __init__(self, nid: str, parents: tuple):
+            self.node_id = nid
+            self.parent_node_ids = parents
+            self.payload = {"step": "cycle"}
+
+    adv_cycle = TestAdversarialCycleNode(nA.node_id, (nD.node_id,))
+    nodes_before_cycle = dict(store._nodes)
+
+    with pytest.raises(ValueError, match="Arbitrary cycle detected in provenance graph"):
+        store.record(adv_cycle)
+
+    # Assert store state remains completely unchanged and atomic after rejection
+    assert store._nodes == nodes_before_cycle
+    assert len(store._nodes) == 4
+    assert store.get_node(nA.node_id) == nA
 
 
 def test_triple_hash_tampering_matrix():
