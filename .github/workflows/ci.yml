@@ -2,9 +2,9 @@ name: Gyroscope CI Quality Gates
 
 on:
   push:
-    branches: [ main, "foundation/*" ]
+    branches: [ main, "foundation/*", "phase-1-*" ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, "foundation/*", "phase-1-*" ]
 
 jobs:
   test:

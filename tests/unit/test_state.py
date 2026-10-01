@@ -44,7 +44,7 @@ def test_corrupted_state_hash_rejection():
     # Tamper with custom_state in the JSON payload without updating header state_hash
     tampered = serialized.replace('"custom_state": {}', '"custom_state": {"hacked": true}')
 
-    with pytest.raises(StateCorruptedException, match="State hash integrity failure"):
+    with pytest.raises(StateCorruptedException, match="Snapshot envelope integrity failure"):
         deserialize_state(tampered)
 
 
