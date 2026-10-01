@@ -74,8 +74,8 @@ def test_sequence_monotonicity_and_regression_rejection():
 
 
 def test_atomic_rejection_boundary_matrix():
-    """Comprehensive test matrix A through N proving zero observable state mutation across all Phase 1 rejection boundaries."""
-    # Boundary A & B: State sequence regression and duplicate sequence rejection
+    """Formal atomic rejection boundary test matrix A through N proving zero observable state side-effects and distinguishing REJECTED_ATOMICALLY from ACCEPTED_IDEMPOTENTLY_WITH_NO_STATE_CHANGE."""
+    # Boundary A: Sequence regression (REJECTED_ATOMICALLY)
     state = SystemState(symbol="BTC-USD", sequence_number=5, last_event_timestamp_ns=5000, last_event_id="evt_5", custom_state={"initial": True})
     hash_before = state.compute_state_hash()
     pld_hash_before = state.compute_state_payload_hash()
@@ -91,7 +91,20 @@ def test_atomic_rejection_boundary_matrix():
     assert state.compute_state_hash() == hash_before
     assert state.compute_state_payload_hash() == pld_hash_before
 
-    # Boundary C: Missing provenance parent rejection
+    # Boundary B: Duplicate event (ACCEPTED_IDEMPOTENTLY_WITH_NO_STATE_CHANGE)
+    # Process valid first event (sequence 6)
+    first_event = Event.create(event_type="TICK", event_timestamp_ns=5050, sequence_number=6, payload={"initial": True}, event_id="evt_6")
+    proc1 = state.process_event(first_event)
+    assert proc1 is True
+    post_first_hash = state.compute_state_hash()
+
+    # Re-submit exact same event
+    proc2 = state.process_event(first_event)
+    assert proc2 is False
+    assert state.sequence_number == 6
+    assert state.compute_state_hash() == post_first_hash
+
+    # Boundary C: Missing provenance parent (REJECTED_ATOMICALLY)
     store = InMemoryProvenanceStore()
     tracker = ProvenanceTracker("sha1", "cfg1", "1.0.0")
 
@@ -107,9 +120,47 @@ def test_atomic_rejection_boundary_matrix():
         store.record(missing_p_node)
     assert store._nodes == nodes_before_missing
 
-    # Boundary D, E, F: Self-cycle, Direct cycle, Transitive cycle (handled in test_provenance_arbitrary_dag_cycle_prevention_at_store_boundary)
+    # Boundary D: Provenance self-cycle (REJECTED_ATOMICALLY)
+    class SelfCycleNode:
+        def __init__(self):
+            self.node_id = "prov_self"
+            self.parent_node_ids = ("prov_self",)
+            self.payload = {}
 
-    # Boundary G: Forged provenance identity rejection
+    nodes_before_self = dict(store._nodes)
+    with pytest.raises(ValueError, match="Self-referential provenance parent prohibited"):
+        store.record(SelfCycleNode())
+    assert store._nodes == nodes_before_self
+
+    # Boundary E: Provenance direct cycle A -> B -> A (REJECTED_ATOMICALLY)
+    nA = tracker.record("OBS", 1000, {"step": "A"})
+    store.record(nA)
+    nB = tracker.record("STATE", 1100, {"step": "B"}, parent_node_ids=[nA.node_id])
+    store.record(nB)
+
+    class DirectCycleNode:
+        def __init__(self, nid: str, parents: tuple):
+            self.node_id = nid
+            self.parent_node_ids = parents
+            self.payload = {"step": "cycle"}
+
+    nodes_before_direct = dict(store._nodes)
+    with pytest.raises(ValueError, match="Arbitrary cycle detected"):
+        store.record(DirectCycleNode(nA.node_id, (nB.node_id,)))
+    assert store._nodes == nodes_before_direct
+
+    # Boundary F: Provenance transitive cycle A -> B -> C -> D -> A (REJECTED_ATOMICALLY)
+    nC = tracker.record("STATE", 1200, {"step": "C"}, parent_node_ids=[nB.node_id])
+    store.record(nC)
+    nD = tracker.record("STATE", 1300, {"step": "D"}, parent_node_ids=[nC.node_id])
+    store.record(nD)
+
+    nodes_before_transitive = dict(store._nodes)
+    with pytest.raises(ValueError, match="Arbitrary cycle detected"):
+        store.record(DirectCycleNode(nA.node_id, (nD.node_id,)))
+    assert store._nodes == nodes_before_transitive
+
+    # Boundary G: Forged provenance identity (REJECTED_ATOMICALLY)
     with pytest.raises(ValueError, match="Cryptographic provenance identity mismatch"):
         ProvenanceNode(
             node_id="prov_forged_id_000000000000000000",
@@ -122,9 +173,7 @@ def test_atomic_rejection_boundary_matrix():
             payload={"test": True},
         )
 
-    # Boundary H: Conflicting historical provenance node rejection
-    valid_node = tracker.record("OBS", 1000, {"valid": True})
-    store.record(valid_node)
+    # Boundary H: Conflicting historical provenance node (REJECTED_ATOMICALLY)
     nodes_before_conflict = dict(store._nodes)
 
     class ConflictingNode:
@@ -136,14 +185,14 @@ def test_atomic_rejection_boundary_matrix():
         def __eq__(self, other):
             return False
 
-    conflicting_node = ConflictingNode(valid_node.node_id)
+    conflicting_node = ConflictingNode(nA.node_id)
     with pytest.raises(ValueError, match="Attempted to mutate historical provenance node"):
         store.record(conflicting_node)
 
     assert store._nodes == nodes_before_conflict
-    assert store.get_node(valid_node.node_id) == valid_node
+    assert store.get_node(nA.node_id) == nA
 
-    # Boundary I: Missing state_payload_hash rejection
+    # Boundary I: Missing state_payload_hash (REJECTED_ATOMICALLY)
     valid_state = SystemState(symbol="ETH-USD", sequence_number=1, custom_state={"ok": True})
     serialized_valid = serialize_state(valid_state)
     data_no_pld_hash = json.loads(serialized_valid)
@@ -153,19 +202,39 @@ def test_atomic_rejection_boundary_matrix():
     with pytest.raises(StateCorruptedException, match="Missing mandatory 'state_payload_hash'"):
         deserialize_state(json.dumps(data_no_pld_hash))
 
-    # Boundary J, K, L, M: State payload, payload hash, state hash, and snapshot hash tampering
+    # Boundary J: State payload tampering (REJECTED_ATOMICALLY)
     data_pld_tampered = json.loads(serialized_valid)
     data_pld_tampered["state_payload"]["custom_state"]["ok"] = False
     data_pld_tampered["snapshot_hash"] = compute_snapshot_hash(data_pld_tampered)
     with pytest.raises(StateCorruptedException, match="State payload hash mismatch"):
         deserialize_state(json.dumps(data_pld_tampered))
 
-    # Boundary N: Header/configuration tampering
-    data_cfg_tampered = json.loads(serialized_valid)
-    data_cfg_tampered["configuration_hash"] = "cfg_tampered_999"
-    data_cfg_tampered["snapshot_hash"] = compute_snapshot_hash(data_cfg_tampered)
+    # Boundary K: Payload hash tampering (REJECTED_ATOMICALLY)
+    data_k = json.loads(serialized_valid)
+    data_k["state_payload_hash"] = "hash_k_tampered"
+    data_k["snapshot_hash"] = compute_snapshot_hash(data_k)
+    with pytest.raises(StateCorruptedException, match="State payload hash mismatch"):
+        deserialize_state(json.dumps(data_k))
+
+    # Boundary L: State hash tampering (REJECTED_ATOMICALLY)
+    data_l = json.loads(serialized_valid)
+    data_l["state_hash"] = "state_hash_l_tampered"
+    data_l["snapshot_hash"] = compute_snapshot_hash(data_l)
     with pytest.raises(StateCorruptedException, match="State hash integrity failure"):
-        deserialize_state(json.dumps(data_cfg_tampered))
+        deserialize_state(json.dumps(data_l))
+
+    # Boundary M: Snapshot hash tampering (REJECTED_ATOMICALLY)
+    data_m = json.loads(serialized_valid)
+    data_m["snapshot_hash"] = "snap_m_tampered"
+    with pytest.raises(StateCorruptedException, match="Snapshot envelope integrity failure"):
+        deserialize_state(json.dumps(data_m))
+
+    # Boundary N: Configuration header tampering (REJECTED_ATOMICALLY)
+    data_n = json.loads(serialized_valid)
+    data_n["configuration_hash"] = "cfg_tampered_999"
+    data_n["snapshot_hash"] = compute_snapshot_hash(data_n)
+    with pytest.raises(StateCorruptedException, match="State hash integrity failure"):
+        deserialize_state(json.dumps(data_n))
 
 
 def test_observation_identity_complete_field_binding_and_mutations():
