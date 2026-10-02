@@ -10,7 +10,8 @@
 
 ```yaml
 repository: Kiyingijmc/Gyroscope
-verification_branch: phase-1-forensic-closure-evidence-reconciliation-20261001
+verification_branch: foundation/closure-correction-verification-pass-4893052973368806390
+target_canonical_branch: main
 historical_foundation_branch: foundation/gyroscope-research-bootstrap-4872793722170977238
 
 foundation_root_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
@@ -45,8 +46,9 @@ purpose: "Establish architectural, research, testing, provenance, determinism, a
 ## 3. CANONICAL VERIFICATION RECORD
 
 ```yaml
-verification_date: "2026-10-01"
-verification_branch: "phase-1-forensic-closure-evidence-reconciliation-20261001"
+verification_date: "2026-10-02"
+verification_branch: "foundation/closure-correction-verification-pass-4893052973368806390"
+target_canonical_branch: "main"
 verification_parent_sha: DYNAMIC_GIT_HEAD_PARENT
 verification_commit_sha: DYNAMIC_GIT_HEAD
 verification_commands:
