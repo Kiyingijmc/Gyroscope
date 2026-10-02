@@ -8,7 +8,7 @@
 ## 1. REPOSITORY METADATA & ENVIRONMENT
 
 - **Repository Identity:** `Kiyingijmc/Gyroscope`
-- **Verification Branch:** `phase-1-forensic-closure-evidence-reconciliation-20261001`
+- **Verification Branch:** `integration/fractal-flow-controlled-domain-20261001-7124396805503510178`
 - **Historical Foundation Branch:** `foundation/gyroscope-research-bootstrap-4872793722170977238`
 - **Foundation Root SHA (`foundation_root_sha`):** `3a9254445849d26544ae6aa5c03a5e767fd3586b`
 - **Foundation v1.0 Closure SHA (`foundation_v1_closure_sha`):** `0f8c01a4004ed34a27660d964d34bb47adea2bc3`
