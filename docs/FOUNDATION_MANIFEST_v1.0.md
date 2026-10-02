@@ -10,7 +10,7 @@
 
 ```yaml
 repository: Kiyingijmc/Gyroscope
-verification_branch: integration/fractal-flow-controlled-domain-20261001-7124396805503510178
+verification_branch: forensic/production-closure-remediation-20261002
 historical_foundation_branch: foundation/gyroscope-research-bootstrap-4872793722170977238
 
 foundation_root_sha: 3a9254445849d26544ae6aa5c03a5e767fd3586b
@@ -46,7 +46,7 @@ purpose: "Establish architectural, research, testing, provenance, determinism, a
 
 ```yaml
 verification_date: "2026-10-01"
-verification_branch: "integration/fractal-flow-controlled-domain-20261001-7124396805503510178"
+verification_branch: "forensic/production-closure-remediation-20261002"
 verification_parent_sha: DYNAMIC_GIT_HEAD_PARENT
 verification_commit_sha: DYNAMIC_GIT_HEAD
 verification_commands:
