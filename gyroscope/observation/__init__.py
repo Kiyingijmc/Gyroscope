@@ -1,5 +1,5 @@
-"""Observation models and deterministic identity derivation."""
+"""Observation package exports."""
 
-from gyroscope.observation.models import Observation, compute_deterministic_observation_id
+from gyroscope.observation.models import Observation
 
-__all__ = ["Observation", "compute_deterministic_observation_id"]
+__all__ = ["Observation"]

@@ -1,17 +1,6 @@
-"""Deterministic state representation, event identity, and state serialization."""
+"""State management exports."""
 
-from gyroscope.state.base import Event, SystemState, compute_deterministic_event_id
-from gyroscope.state.serialization import (
-    compute_snapshot_hash,
-    deserialize_state,
-    serialize_state,
-)
+from gyroscope.state.base import Event, SystemState
+from gyroscope.state.serialization import deserialize_state, serialize_state
 
-__all__ = [
-    "Event",
-    "SystemState",
-    "compute_deterministic_event_id",
-    "compute_snapshot_hash",
-    "serialize_state",
-    "deserialize_state",
-]
+__all__ = ["Event", "SystemState", "serialize_state", "deserialize_state"]
