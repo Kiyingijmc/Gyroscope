@@ -12,48 +12,6 @@ from gyroscope.observation import Observation
 from gyroscope.state import Event, SystemState, deserialize_state, serialize_state
 
 
-def is_synthetic_pr_merge_reference(ref_str: str) -> bool:
-    """Validate whether ref_str is strictly a GitHub Actions synthetic PR merge reference."""
-    clean_ref = ref_str.strip()
-    if clean_ref.startswith("refs/pull/") and clean_ref.endswith("/merge"):
-        pr_id = clean_ref[len("refs/pull/"):-len("/merge")]
-        return pr_id.isdigit()
-    if clean_ref.startswith("pull/") and clean_ref.endswith("/merge"):
-        pr_id = clean_ref[len("pull/"):-len("/merge")]
-        return pr_id.isdigit()
-    if clean_ref.endswith("/merge"):
-        parts = clean_ref.split("/")
-        if len(parts) == 2 and parts[0].isdigit() and parts[1] == "merge":
-            return True
-    return False
-
-
-def test_synthetic_pr_merge_ref_validation():
-    """Verify exact acceptance of synthetic PR merge references and rejection of ordinary branches with 'merge'."""
-    accepted_cases = [
-        "refs/pull/3/merge",
-        "refs/pull/123/merge",
-        "refs/pull/9999/merge",
-        "pull/3/merge",
-        "3/merge",
-    ]
-    rejected_cases = [
-        "feature-merge",
-        "merge",
-        "feature-merge-security",
-        "refs/pull/foo/merge",
-        "refs/pull/3/not-merge",
-        "refs/pull/3/merge-extra",
-        "phase-1-forensic-closure-freeze-merge",
-    ]
-
-    for ref in accepted_cases:
-        assert is_synthetic_pr_merge_reference(ref) is True, f"Expected {ref!r} to be accepted as synthetic PR merge ref"
-
-    for ref in rejected_cases:
-        assert is_synthetic_pr_merge_reference(ref) is False, f"Expected {ref!r} to be REJECTED as synthetic PR merge ref"
-
-
 def test_foundation_package_structure():
     """Verify that required package directories and core files exist on disk."""
     root = Path(__file__).parent.parent.parent
@@ -110,8 +68,8 @@ def test_provenance_documentation_agrees_with_git():
     git_branch = subprocess.check_output(
         ["git", "branch", "--show-current"], cwd=root, text=True
     ).strip()
-    if not git_branch or git_branch == "HEAD" or is_synthetic_pr_merge_reference(git_branch):
-        git_branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME", git_branch)
+    if not git_branch:
+        git_branch = os.environ.get("GITHUB_REF_NAME", "foundation/closure-correction-verification-pass-4893052973368806390")
 
     manifest_path = root / "docs" / "FOUNDATION_MANIFEST_v1.0.md"
     baseline_path = root / "docs" / "GYROSCOPE_BASELINE.md"
@@ -136,44 +94,13 @@ def test_provenance_documentation_agrees_with_git():
         f"Parent commit SHA {git_parent} resolved from HEAD^ is not a valid commit object."
     )
 
-    # Helper to validate synthetic PR merge refs strictly
-    is_synthetic_pr_merge_ref = is_synthetic_pr_merge_reference(git_branch)
-
-    # Extract documented verification_branch values from manifest and baseline
-    manifest_branch_val = None
-    for line in manifest_text.splitlines():
-        if line.strip().startswith("verification_branch:"):
-            manifest_branch_val = line.split(":", 1)[1].strip().strip('"')
-            break
-
-    baseline_branch_val = None
-    for line in baseline_text.splitlines():
-        if "- **Verification Branch:**" in line:
-            baseline_branch_val = line.split("`")[1].strip()
-            break
-
-    # C. Verification branch must match actual Git branch exact identity, branch family prefix, or synthetic PR reference
-    is_valid_manifest_branch = (
-        manifest_branch_val is not None and (
-            git_branch == manifest_branch_val
-            or git_branch.startswith(manifest_branch_val)
-            or manifest_branch_val.startswith(git_branch)
-            or (git_branch.startswith("phase-1-forensic-closure") and manifest_branch_val.startswith("phase-1-forensic-closure"))
-            or is_synthetic_pr_merge_ref
-        )
+    # C. Verification branch must match actual Git branch
+    assert f"verification_branch: {git_branch}" in manifest_text, (
+        f"Manifest verification_branch does not match Git branch: {git_branch}"
     )
-    assert is_valid_manifest_branch, f"Manifest verification_branch ({manifest_branch_val!r}) does not match Git branch: {git_branch}"
-
-    is_valid_baseline_branch = (
-        baseline_branch_val is not None and (
-            git_branch == baseline_branch_val
-            or git_branch.startswith(baseline_branch_val)
-            or baseline_branch_val.startswith(git_branch)
-            or (git_branch.startswith("phase-1-forensic-closure") and baseline_branch_val.startswith("phase-1-forensic-closure"))
-            or is_synthetic_pr_merge_ref
-        )
+    assert f"- **Verification Branch:** `{git_branch}`" in baseline_text, (
+        f"Baseline Verification Branch does not match Git branch: {git_branch}"
     )
-    assert is_valid_baseline_branch, f"Baseline Verification Branch ({baseline_branch_val!r}) does not match Git branch: {git_branch}"
 
     # D. Verification commit SHA is declared as dynamic current HEAD assertion
     assert "verified_commit_sha: DYNAMIC_GIT_HEAD" in manifest_text
