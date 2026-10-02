@@ -9,6 +9,7 @@
 
 - **Repository Identity:** `Kiyingijmc/Gyroscope`
 - **Verification Branch:** `foundation/closure-correction-verification-pass-4893052973368806390`
+- **Target Canonical Branch:** `main`
 - **Historical Foundation Branch:** `foundation/gyroscope-research-bootstrap-4872793722170977238`
 - **Foundation Root SHA (`foundation_root_sha`):** `3a9254445849d26544ae6aa5c03a5e767fd3586b`
 - **Foundation v1.0 Closure SHA (`foundation_v1_closure_sha`):** `0f8c01a4004ed34a27660d964d34bb47adea2bc3`

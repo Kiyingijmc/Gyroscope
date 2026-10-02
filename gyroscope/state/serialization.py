@@ -1,7 +1,7 @@
 """State serialization and deserialization routines adhering to STATE_SERIALIZATION_CONTRACT."""
 
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from gyroscope.core.exceptions import StateCorruptedException, VersionMismatchError
 from gyroscope.state.base import SystemState
@@ -33,7 +33,7 @@ def deserialize_state(
     json_str: str,
     expected_schema_version: str = "1.0",
     expected_model_version: str = "1.0.0",
-    expected_config_hash: str = None,
+    expected_config_hash: Optional[str] = None,
 ) -> SystemState:
     """Deserialize state JSON string and verify state hash and version invariants."""
     try:
