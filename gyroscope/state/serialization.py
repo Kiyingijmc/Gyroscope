@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from gyroscope.core.exceptions import StateCorruptedException, VersionMismatchError
 from gyroscope.state.base import SystemState
@@ -63,7 +63,7 @@ def deserialize_state(
     json_str: str,
     expected_schema_version: str = "1.0",
     expected_model_version: str = "1.0.0",
-    expected_config_hash: str = None,
+    expected_config_hash: Optional[str] = None,
 ) -> SystemState:
     """Deserialize state JSON string and independently verify snapshot envelope hash, state hash, mandatory payload hash, and version invariants."""
     try:
