@@ -41,7 +41,7 @@ class FrozenDict(Mapping):
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert back to a standard Python dictionary recursively."""
-        res = {}
+        res: Dict[str, Any] = {}
         for k, v in self._data.items():
             if isinstance(v, FrozenDict):
                 res[k] = v.to_dict()
